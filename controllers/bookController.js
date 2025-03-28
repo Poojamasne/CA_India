@@ -92,6 +92,22 @@ exports.getBooks = async (req, res) => {
     }
 };
 
+exports.getBookById = async (req, res) => {
+    const { book_id } = req.params;
+
+    try {
+        const [book] = await db.query("SELECT * FROM books WHERE book_id = ?", [book_id]);
+
+        if (book.length === 0) {
+            return res.status(404).json({ success: false, message: "Book not found" });
+        }
+
+        res.status(200).json({ success: true, data: book[0] });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to fetch book", error: err.message });
+    }
+};
+
 // ✅ Rename a book
 exports.renameBook = async (req, res) => {
     const { book_id } = req.params;
