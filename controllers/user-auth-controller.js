@@ -30,7 +30,7 @@ exports.signup = async (req, res) => {
 
         const userId = result.insertId;  // Get the newly inserted user's ID
 
-        const token = jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const token = jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '365d' });
 
         res.status(201).json({ success: true, message: "User registered successfully", token , userId});
     } catch (error) {
@@ -57,7 +57,7 @@ exports.login = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid password" });
         }
 
-        const token = jwt.sign({ userId: user[0].id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const token = jwt.sign({ userId: user[0].id }, process.env.JWT_SECRET, { expiresIn: '365d' });
 
         res.json({ success: true, message: "Login successful", token, userId: user[0].id });
 
