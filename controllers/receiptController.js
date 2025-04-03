@@ -16,48 +16,99 @@ exports.addReceiptEntry = async (req, res) => {
             category_split,
             customer_field,
             payment_mode,
-            selected_bank
+            selected_bank,
+            user_id  // Added user_id to the destructured request body
         } = req.body;
 
-        if (!receipt_type || !amount || !party || !payment_mode) {
-            return res.status(400).json({ error: "Missing required fields" });
+        // Include user_id in required fields check
+        if (!receipt_type || !amount || !party || !payment_mode || !user_id) {
+            return res.status(400).json({ 
+                error: "Missing required fields",
+                missing: {
+                    receipt_type: !receipt_type,
+                    amount: !amount,
+                    party: !party,
+                    payment_mode: !payment_mode,
+                    user_id: !user_id
+                }
+            });
         }
 
         // Generate a unique receipt number
-        const receipt_no = `RECPT-${Date.now().toString().slice(-6)}`;
+        const receipt_no = generateReceiptNo();
 
-        // SQL Query to insert a new receipt
+        // SQL Query to insert a new receipt (added user_id)
         const sql = `INSERT INTO receipt_entries 
-            (receipt_no, receipt_type, amount, party, remark, category_split, customer_field, payment_mode, selected_bank, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`;
+            (receipt_no, receipt_type, amount, party, remark, category_split, 
+             customer_field, payment_mode, selected_bank, user_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`;
 
-        // Execute SQL Query
+        // Execute SQL Query (added user_id to parameters)
         const [result] = await db.execute(sql, [
-            receipt_no, receipt_type, amount, party, remark, category_split, customer_field, payment_mode, selected_bank
+            receipt_no, receipt_type, amount, party, remark, 
+            category_split, customer_field, payment_mode, 
+            selected_bank, user_id
         ]);
 
         res.json({ 
             message: "Receipt entry added successfully",
             receipt_id: result.insertId,
-            receipt_no: receipt_no,  // Include the generated receipt number
-            date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }), // e.g., "Mar 17, 2025"
-            time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) // e.g., "05:16 PM"
+            receipt_no: receipt_no,
+            user_id: user_id,  // Include user_id in response
+            date: new Date().toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: '2-digit', 
+                year: 'numeric' 
+            }),
+            time: new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                hour12: true 
+            })
         });
 
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message,
+            sqlError: error.sqlMessage  // Include SQL error details if available
+        });
     }
 };
-
 
 // 📌 Get all receipt entries (ASYNC/AWAIT)
 exports.getAllReceipts = async (req, res) => {
     try {
-        const [results] = await db.execute("SELECT *, DATE_FORMAT(created_at, '%d %b %Y') AS date, DATE_FORMAT(created_at, '%h:%i %p') AS time FROM receipt_entries");
-        res.json({ receipts: results });
+        // Option 1: Get all receipts for all users (admin view)
+        // const [results] = await db.execute(
+        //     "SELECT *, DATE_FORMAT(created_at, '%d %b %Y') AS date, 
+        //     DATE_FORMAT(created_at, '%h:%i %p') AS time FROM receipt_entries"
+        // );
+
+        // Option 2: Get receipts for specific user (common case)
+        const { user_id } = req.query;  // Get user_id from query params
+        if (!user_id) {
+            return res.status(400).json({ error: "user_id is required" });
+        }
+
+        const [results] = await db.execute(
+            `SELECT *, 
+             DATE_FORMAT(created_at, '%d %b %Y') AS date, 
+             DATE_FORMAT(created_at, '%h:%i %p') AS time 
+             FROM receipt_entries WHERE user_id = ?`,
+            [user_id]
+        );
+
+        res.json({ 
+            receipts: results,
+            count: results.length,
+            user_id: user_id
+        });
 
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message,
+            sqlError: error.sqlMessage
+        });
     }
 };
 
@@ -65,16 +116,44 @@ exports.getAllReceipts = async (req, res) => {
 exports.deleteReceiptEntry = async (req, res) => {
     try {
         const { id } = req.params;
-        const [result] = await db.execute("DELETE FROM receipt_entries WHERE id = ?", [id]);
+        const { user_id } = req.body;  // Require user_id for verification
+
+        if (!user_id) {
+            return res.status(400).json({ error: "user_id is required" });
+        }
+
+        // Verify the receipt belongs to the user before deleting
+        const [verify] = await db.execute(
+            "SELECT id FROM receipt_entries WHERE id = ? AND user_id = ?",
+            [id, user_id]
+        );
+
+        if (verify.length === 0) {
+            return res.status(403).json({ 
+                error: "Receipt not found or not owned by user" 
+            });
+        }
+
+        const [result] = await db.execute(
+            "DELETE FROM receipt_entries WHERE id = ? AND user_id = ?",
+            [id, user_id]
+        );
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: "Receipt entry not found" });
         }
 
-        res.json({ message: "Receipt entry deleted successfully" });
+        res.json({ 
+            message: "Receipt entry deleted successfully",
+            receipt_id: id,
+            user_id: user_id
+        });
 
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message,
+            sqlError: error.sqlMessage
+        });
     }
 };
 
@@ -90,28 +169,62 @@ exports.updateReceiptEntry = async (req, res) => {
             category_split, 
             customer_field, 
             payment_mode, 
-            selected_bank
+            selected_bank,
+            user_id  // Added user_id
         } = req.body;
 
-        if (!receipt_type || !amount || !party || !payment_mode) {
-            return res.status(400).json({ error: "Missing required fields" });
+        // Include user_id in validation
+        if (!receipt_type || !amount || !party || !payment_mode || !user_id) {
+            return res.status(400).json({ 
+                error: "Missing required fields",
+                missing: {
+                    receipt_type: !receipt_type,
+                    amount: !amount,
+                    party: !party,
+                    payment_mode: !payment_mode,
+                    user_id: !user_id
+                }
+            });
+        }
+
+        // Verify ownership before update
+        const [verify] = await db.execute(
+            "SELECT id FROM receipt_entries WHERE id = ? AND user_id = ?",
+            [id, user_id]
+        );
+
+        if (verify.length === 0) {
+            return res.status(403).json({ 
+                error: "Receipt not found or not owned by user" 
+            });
         }
 
         const sql = `UPDATE receipt_entries 
-            SET receipt_type = ?, amount = ?, party = ?, remark = ?, category_split = ?, customer_field = ?, payment_mode = ?, selected_bank = ?
-            WHERE id = ?`;
+            SET receipt_type = ?, amount = ?, party = ?, remark = ?, 
+                category_split = ?, customer_field = ?, payment_mode = ?, 
+                selected_bank = ?
+            WHERE id = ? AND user_id = ?`;
 
         const [result] = await db.execute(sql, [
-            receipt_type, amount, party, remark, category_split, customer_field, payment_mode, selected_bank, id
+            receipt_type, amount, party, remark, category_split, 
+            customer_field, payment_mode, selected_bank, 
+            id, user_id  // Added user_id as parameter
         ]);
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: "Receipt entry not found" });
         }
 
-        res.json({ message: "Receipt entry updated successfully" });
+        res.json({ 
+            message: "Receipt entry updated successfully",
+            receipt_id: id,
+            user_id: user_id
+        });
 
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message,
+            sqlError: error.sqlMessage
+        });
     }
 };

@@ -7,32 +7,56 @@ const setSocket = (socketIo) => {
 };
 
 const sendnotification = async (req, res) => {
-    const { message } = req.body;
-    if (!message) {
-        return res.status(400).json({ success: false, message: "Message is required" });
+    const { message, userId } = req.body; // Add userId to request body
+    if (!message || !userId) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Message and userId are required" 
+        });
     }
 
     try {
-        const id = await notification.createnotification(message);
-        const notification = { id, message, timestamp: new Date() };
+        // Pass userId to the createnotification function
+        const id = await notification.createnotification(message, userId);
+        const newNotification = { 
+            id, 
+            message, 
+            userId, // Include userId in the notification object
+            timestamp: new Date() 
+        };
 
         // Send the notification to all connected clients
         if (io) {
-            io.emit('newnotification', notification);
+            io.emit('newnotification', newNotification);
         }
 
-        res.status(201).json({ success: true, message: "notification sent", notification });
+        res.status(201).json({ 
+            success: true, 
+            message: "Notification sent", 
+            notification: newNotification 
+        });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Failed to send notification", error: error.message });
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to send notification", 
+            error: error.message 
+        });
     }
 };
 
 const getnotifications = async (req, res) => {
     try {
         const notifications = await notification.getnotifications();
-        res.status(200).json({ success: true, notifications });
+        res.status(200).json({ 
+            success: true, 
+            notifications 
+        });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Failed to fetch notifications", error: error.message });
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to fetch notifications", 
+            error: error.message 
+        });
     }
 };
 

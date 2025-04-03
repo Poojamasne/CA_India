@@ -2,81 +2,205 @@ const db = require('../db');
 
 // Add new party
 exports.addpartyEntry = async (req, res) => {
-    const { party, gst_number, address, state, contact_number, alt_contact_number, reference_name, customer_field, grade } = req.body;
+    const { 
+        party, 
+        gst_number, 
+        address, 
+        state, 
+        contact_number, 
+        alt_contact_number, 
+        reference_name, 
+        customer_field, 
+        grade,
+        user_id  // Added user_id
+    } = req.body;
 
-    if (!party || !gst_number || !address || !state || !contact_number || !customer_field || !grade) {
-        return res.status(400).json({ message: "All required fields must be provided" });
+    // Include user_id in required fields
+    if (!party || !gst_number || !address || !state || !contact_number || !customer_field || !grade || !user_id) {
+        return res.status(400).json({ 
+            message: "All required fields must be provided",
+            missing_fields: {
+                party: !party,
+                gst_number: !gst_number,
+                address: !address,
+                state: !state,
+                contact_number: !contact_number,
+                customer_field: !customer_field,
+                grade: !grade,
+                user_id: !user_id
+            }
+        });
     }
 
     try {
         const query = `
-            INSERT INTO parties (party, gst_number, address, state, contact_number, alt_contact_number, reference_name, customer_field, grade) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO parties 
+            (party, gst_number, address, state, contact_number, alt_contact_number, 
+             reference_name, customer_field, grade, user_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
-        await db.execute(query, [party, gst_number, address, state, contact_number, alt_contact_number, reference_name, customer_field, grade]);
+        const [result] = await db.execute(query, [
+            party, gst_number, address, state, contact_number, 
+            alt_contact_number, reference_name, customer_field, 
+            grade, user_id
+        ]);
 
-        res.status(201).json({ message: "Party added successfully" });
+        res.status(201).json({ 
+            message: "Party added successfully",
+            party_id: result.insertId,
+            user_id: user_id
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message,
+            sqlError: error.sqlMessage
+        });
     }
 };
 
-// Get all parties
+// Get all parties (with user filtering)
 exports.getAllpartys = async (req, res) => {
     try {
-        const [results] = await db.execute("SELECT * FROM parties");
-        res.json(results);
+        // Option 1: Get all parties (admin view)
+        // const [results] = await db.execute("SELECT * FROM parties");
+        
+        // Option 2: Get parties for specific user (recommended)
+        const { user_id } = req.query;
+        if (!user_id) {
+            return res.status(400).json({ message: "user_id is required" });
+        }
+
+        const [results] = await db.execute(
+            "SELECT * FROM parties WHERE user_id = ?", 
+            [user_id]
+        );
+
+        res.json({
+            parties: results,
+            count: results.length,
+            user_id: user_id
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message,
+            sqlError: error.sqlMessage
+        });
     }
 };
 
 // Update a party
 exports.updatepartyEntry = async (req, res) => {
     const { id } = req.params;
-    const { party, gst_number, address, state, contact_number, alt_contact_number, reference_name, customer_field, grade } = req.body;
+    const { 
+        party, 
+        gst_number, 
+        address, 
+        state, 
+        contact_number, 
+        alt_contact_number, 
+        reference_name, 
+        customer_field, 
+        grade,
+        user_id  // Added user_id
+    } = req.body;
 
     try {
+        // Verify party belongs to user before updating
+        const [verify] = await db.execute(
+            "SELECT id FROM parties WHERE id = ? AND user_id = ?",
+            [id, user_id]
+        );
+
+        if (verify.length === 0) {
+            return res.status(403).json({ 
+                message: "Party not found or not owned by user" 
+            });
+        }
+
         const query = `
             UPDATE parties 
-            SET party = ?, gst_number = ?, address = ?, state = ?, contact_number = ?, alt_contact_number = ?, reference_name = ?, customer_field = ?, grade = ? 
-            WHERE id = ?
+            SET party = ?, gst_number = ?, address = ?, state = ?, 
+                contact_number = ?, alt_contact_number = ?, 
+                reference_name = ?, customer_field = ?, grade = ? 
+            WHERE id = ? AND user_id = ?
         `;
-        const [result] = await db.execute(query, [party, gst_number, address, state, contact_number, alt_contact_number, reference_name, customer_field, grade, id]);
+        const [result] = await db.execute(query, [
+            party, gst_number, address, state, contact_number, 
+            alt_contact_number, reference_name, customer_field, 
+            grade, id, user_id
+        ]);
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: "Party not found" });
         }
 
-        res.json({ message: "Party updated successfully" });
+        res.json({ 
+            message: "Party updated successfully",
+            party_id: id,
+            user_id: user_id
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message,
+            sqlError: error.sqlMessage
+        });
     }
 };
 
 // Delete a party
 exports.deletepartyEntry = async (req, res) => {
     const { id } = req.params;
+    const { user_id } = req.body;  // Require user_id for verification
+
+    if (!user_id) {
+        return res.status(400).json({ message: "user_id is required" });
+    }
 
     try {
-        const [result] = await db.execute("DELETE FROM parties WHERE id = ?", [id]);
+        // Verify party belongs to user before deleting
+        const [verify] = await db.execute(
+            "SELECT id FROM parties WHERE id = ? AND user_id = ?",
+            [id, user_id]
+        );
+
+        if (verify.length === 0) {
+            return res.status(403).json({ 
+                message: "Party not found or not owned by user" 
+            });
+        }
+
+        const [result] = await db.execute(
+            "DELETE FROM parties WHERE id = ? AND user_id = ?",
+            [id, user_id]
+        );
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: "Party not found" });
         }
 
-        res.json({ message: "Party deleted successfully" });
+        res.json({ 
+            message: "Party deleted successfully",
+            party_id: id,
+            user_id: user_id
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            error: error.message,
+            sqlError: error.sqlMessage
+        });
     }
 };
 
-// get grades by book 
+// Get grades by book (updated with user verification)
 exports.getGradeByBook = async (req, res) => {
     const bookId = parseInt(req.params.bookId);
+    const { user_id } = req.query;  // Get user_id from query params
+
+    if (!user_id) {
+        return res.status(400).json({ message: "user_id is required" });
+    }
 
     try {
-        // Fetch the book details along with grade from the parties table
         const query = `
             SELECT 
                 b.book_id, 
@@ -93,24 +217,33 @@ exports.getGradeByBook = async (req, res) => {
                 p.alt_contact_number, 
                 p.reference_name, 
                 p.customer_field, 
-                p.grade 
+                p.grade,
+                p.user_id
             FROM books b
-            LEFT JOIN parties p ON b.party_id = p.id  -- Corrected table & column name
-            WHERE b.book_id = ?`;
+            LEFT JOIN parties p ON b.party_id = p.id
+            WHERE b.book_id = ? AND p.user_id = ?`;
 
-        const [result] = await db.query(query, [bookId]);
+        const [result] = await db.query(query, [bookId, user_id]);
 
         if (!result || result.length === 0) {
-            return res.status(404).json({ message: 'Book not found or no grade available' });
+            return res.status(404).json({ 
+                message: 'Book not found or no grade available for this user',
+                book_id: bookId,
+                user_id: user_id
+            });
         }
 
         const bookWithGrade = result[0];
-
-        res.json(bookWithGrade);
+        res.json({
+            ...bookWithGrade,
+            user_id: user_id
+        });
     } catch (error) {
         console.error('Error fetching book grade:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        res.status(500).json({ 
+            message: 'Internal Server Error',
+            error: error.message
+        });
     }
 };
-
 
