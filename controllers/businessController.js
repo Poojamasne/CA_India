@@ -2,23 +2,54 @@ const db = require("../db");
 
 // ✅ Add Business
 exports.addBusiness = async (req, res) => {
-    const { business_name } = req.body;
+    const { business_name, user_id, business_category = 'Other', business_type = 'Other' } = req.body;
 
-    if (!business_name) {
-        return res.status(400).json({ success: false, message: "Business name is required" });
+    // Validation
+    if (!business_name || !user_id) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Business name and user ID are required" 
+        });
     }
 
     try {
-        const [result] = await db.query("INSERT INTO businesses (business_name) VALUES (?)", [business_name]);
+        // Verify user exists
+        const [user] = await db.query("SELECT id FROM users WHERE id = ?", [user_id]);
+        if (user.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
 
-        // Add the default user role as 'Owner' in business_members table
-        await db.query("INSERT INTO business_members (business_id, user_role) VALUES (?, 'Owner')", [result.insertId]);
+        // Insert business
+        const [businessResult] = await db.query(
+            `INSERT INTO businesses 
+            (business_name, user_id, business_category, business_type, created_at) 
+            VALUES (?, ?, ?, ?, NOW())`,
+            [business_name, user_id, business_category, business_type]
+        );
 
-        res.status(201).json({ success: true, message: "Business added successfully", business_id: result.insertId });
+        res.status(201).json({ 
+            success: true, 
+            message: "Business added successfully", 
+            data: {
+                business_id: businessResult.insertId,
+                business_name,
+                user_id
+            }
+        });
+
     } catch (error) {
-        res.status(500).json({ success: false, message: "Failed to add business", error: error.message });
+        console.error("Database Error:", error);
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to add business",
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
 };
+
 
 // ✅ Update Business Category
 exports.updateBusinessCategory = async (req, res) => {
@@ -80,10 +111,45 @@ exports.getBusinesses = async (req, res) => {
     }
 };
 
+//Get All Businesses by UserId
+// exports.getBusinessesByUserId = async (req, res) => {
+//     const { user_id } = req.params;
+
+//     if (!user_id || isNaN(user_id)) {
+//         return res.status(400).json({
+//             success: false,
+//             message: "Valid user ID is required"
+//         });
+//     }
+
+//     try {
+//         const [businesses] = await db.query(`
+//             SELECT DISTINCT b.* 
+//             FROM businesses b
+//             JOIN books bk ON b.business_id = bk.business_id
+//             WHERE bk.entry_by = ?
+//             ORDER BY b.created_at DESC
+//         `, [parseInt(user_id)]);
+
+//         res.status(200).json({
+//             success: true,
+//             count: businesses.length,
+//             data: businesses
+//         });
+//     } catch (err) {
+//         console.error("Error fetching businesses:", err);
+//         res.status(500).json({
+//             success: false,
+//             message: "Failed to fetch businesses",
+//             error: err.message
+//         });
+//     }
+// };
 
 exports.getBusinessesByUserId = async (req, res) => {
     const { user_id } = req.params;
 
+    // Validate user ID
     if (!user_id || isNaN(user_id)) {
         return res.status(400).json({
             success: false,
@@ -92,11 +158,17 @@ exports.getBusinessesByUserId = async (req, res) => {
     }
 
     try {
+        // Get businesses where user is the owner (user_id matches)
         const [businesses] = await db.query(`
-            SELECT DISTINCT b.* 
+            SELECT 
+                b.business_id,
+                b.business_name,
+                b.business_category,
+                b.business_type,
+                b.created_at,
+                'Owner' as user_role
             FROM businesses b
-            JOIN books bk ON b.business_id = bk.business_id
-            WHERE bk.entry_by = ?
+            WHERE b.user_id = ?
             ORDER BY b.created_at DESC
         `, [parseInt(user_id)]);
 
@@ -105,12 +177,13 @@ exports.getBusinessesByUserId = async (req, res) => {
             count: businesses.length,
             data: businesses
         });
-    } catch (err) {
-        console.error("Error fetching businesses:", err);
+
+    } catch (error) {
+        console.error("Error fetching businesses:", error);
         res.status(500).json({
             success: false,
             message: "Failed to fetch businesses",
-            error: err.message
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
 };
@@ -153,3 +226,4 @@ exports.deleteBusiness = async (req, res) => {
         res.status(500).json({ success: false, message: "Failed to delete business", error: error.message });
     }
 };
+
