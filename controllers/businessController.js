@@ -81,6 +81,40 @@ exports.getBusinesses = async (req, res) => {
 };
 
 
+exports.getBusinessesByUserId = async (req, res) => {
+    const { user_id } = req.params;
+
+    if (!user_id || isNaN(user_id)) {
+        return res.status(400).json({
+            success: false,
+            message: "Valid user ID is required"
+        });
+    }
+
+    try {
+        const [businesses] = await db.query(`
+            SELECT DISTINCT b.* 
+            FROM businesses b
+            JOIN books bk ON b.business_id = bk.business_id
+            WHERE bk.entry_by = ?
+            ORDER BY b.created_at DESC
+        `, [parseInt(user_id)]);
+
+        res.status(200).json({
+            success: true,
+            count: businesses.length,
+            data: businesses
+        });
+    } catch (err) {
+        console.error("Error fetching businesses:", err);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch businesses",
+            error: err.message
+        });
+    }
+};
+
 // ✅ Get a Single Business by ID
 exports.getBusinessById = async (req, res) => {
     const { id } = req.params;

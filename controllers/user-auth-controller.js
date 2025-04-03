@@ -38,7 +38,6 @@ exports.signup = async (req, res) => {
     }
 };
 
-
 exports.login = async (req, res) => {
     try {
         const { phone_number, password } = req.body;
@@ -121,3 +120,4 @@ exports.resetPassword = async (req, res) => {
         res.status(500).json({ success: false, message: "Server error", error: error.message });
     }
 };
+

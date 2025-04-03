@@ -173,3 +173,64 @@ exports.deleteBook = async (req, res) => {
         res.status(500).json({ success: false, message: "Failed to delete book", error: err.message });
     }
 };
+
+// ✅ Get all books by user ID
+// ✅ Get all books by user ID
+exports.getBooksByUserId = async (req, res) => {
+    const { user_id } = req.params;
+
+    if (!user_id || isNaN(user_id)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Valid user ID is required" 
+        });
+    }
+
+    try {
+        const [books] = await db.query(`
+            SELECT 
+                b.book_id, 
+                b.book_name, 
+                b.inventory_status, 
+                b.business_id, 
+                b.net_balance, 
+                b.receipt, 
+                b.payment, 
+                b.recent_entries_date, 
+                b.party_id, 
+                b.income_tax_challan, 
+                b.entry_by, 
+                b.entry_time, 
+                b.balance, 
+                b.created_at,
+                COUNT(m.member_name) AS member_count
+            FROM books b
+            LEFT JOIN book_members m ON b.book_id = m.book_id
+            WHERE b.entry_by = ?
+            GROUP BY b.book_id
+            ORDER BY b.created_at DESC
+        `, [parseInt(user_id)]);  // Ensure numeric user_id
+
+        if (books.length === 0) {
+            return res.status(404).json({ 
+                success: true, 
+                message: "No books found for this user",
+                data: []
+            });
+        }
+
+        res.status(200).json({ 
+            success: true, 
+            data: books 
+        });
+    } catch (err) {
+        console.error("Error fetching books:", err);
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to fetch books", 
+            error: err.message 
+        });
+    }
+};
+
+
