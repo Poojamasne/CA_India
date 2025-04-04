@@ -46,7 +46,8 @@ exports.addpaymentEntry = async (req, res) => {
             selected_bank, user_id
         ]);
 
-        res.json({ 
+        res.json({
+            success: true, 
             message: "Payment entry added successfully",
             payment_id: result.insertId,
             payment_no: payment_no,
@@ -179,7 +180,8 @@ exports.updatepaymentEntry = async (req, res) => {
             id, user_id
         ]);
 
-        res.json({ 
+        res.json({
+            success: true, 
             message: "Payment entry updated successfully",
             payment_id: id,
             user_id: user_id
@@ -237,6 +239,7 @@ exports.addPaymentMode = async (req, res) => {
         ]);
 
         res.status(201).json({
+            success: true,
             message: 'Payment mode added successfully',
             payment_id: insertResult.insertId,
             user_id: user_id

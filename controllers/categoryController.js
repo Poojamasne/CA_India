@@ -91,7 +91,7 @@ const updateCategoryAmount = async (req, res) => {
     
     try {
         await db.query("UPDATE categories SET amount = ? WHERE id = ?", [amount, id]);
-        res.json({ message: "Category amount updated successfully" });
+        res.json({ success: true, message: "Category amount updated successfully" });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

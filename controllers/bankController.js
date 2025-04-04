@@ -39,6 +39,7 @@ exports.addBankAccount = async (req, res) => {
         ]);
 
         res.json({ 
+            success: true,
             message: "Bank account added successfully",
             bankId: result.insertId,
             user_id: user_id
@@ -128,6 +129,7 @@ exports.updateBankAccount = async (req, res) => {
         ]);
 
         res.json({ 
+            success: true,
             message: "Bank account updated successfully",
             bankId: id,
             user_id: user_id

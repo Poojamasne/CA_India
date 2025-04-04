@@ -29,6 +29,7 @@ exports.addTransfer = async (req, res) => {
         const [result] = await db.query(sql, values);
 
         res.status(201).json({
+            success: true,
             message: "Transfer added successfully",
             transfer_no: transferNo,
             id: result.insertId // ✅ Return the inserted transfer ID

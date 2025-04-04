@@ -60,6 +60,45 @@ exports.addBook = async (req, res) => {
 //     }
 // };
 
+// ✅ Add a new book and return user_id in response
+exports.addnewBook = async (req, res) => {
+    const { book_name, inventory_status, business_id, user_id } = req.body;
+
+    if (!book_name || inventory_status === undefined || !business_id || !user_id) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Book name, inventory status, business ID, and user ID are required" 
+        });
+    }
+
+    try {
+        const [result] = await db.query(
+            "INSERT INTO books (book_name, inventory_status, business_id, user_id, created_at) VALUES (?, ?, ?, ?, NOW())",
+            [book_name, inventory_status, business_id, user_id]
+        );
+
+        const bookId = result.insertId;
+
+        // Log the response before sending it
+        console.log("Response Data:", { success: true, message: "Book added successfully", book_id: bookId, user_id });
+
+        res.status(201).json({ 
+            success: true, 
+            message: "Book added successfully", 
+            book_id: bookId,
+            user_id: user_id  // ✅ Ensure this is included
+        });
+    } catch (err) {
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to add book", 
+            error: err.message 
+        });
+    }
+};
+
+
+
 
 // ✅ Get all books with member count
 exports.getBooks = async (req, res) => {

@@ -51,6 +51,7 @@ exports.addReceiptEntry = async (req, res) => {
         ]);
 
         res.json({ 
+            success: true,
             message: "Receipt entry added successfully",
             receipt_id: result.insertId,
             receipt_no: receipt_no,
@@ -216,6 +217,7 @@ exports.updateReceiptEntry = async (req, res) => {
         }
 
         res.json({ 
+            success: true,
             message: "Receipt entry updated successfully",
             receipt_id: id,
             user_id: user_id

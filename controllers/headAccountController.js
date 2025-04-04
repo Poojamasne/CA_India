@@ -19,6 +19,7 @@ exports.addHeadAccount = async (req, res) => {
         const [result] = await db.execute(sql, [name, user_id]);
 
         res.json({ 
+            success: true,
             message: "Head account added successfully", 
             headAccountId: result.insertId,
             user_id: user_id

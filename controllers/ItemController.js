@@ -27,7 +27,7 @@ exports.addItem = async (req, res) => {
         const values = [item_name, quantity_measurement, gst_rate, opening_stock, opening_stock_date, hsn_code];
 
         const [result] = await db.query(sql, values);
-        res.status(201).json({ message: "Item added successfully", item_id: result.insertId });
+        res.status(201).json({ success: true, message: "Item added successfully", item_id: result.insertId });
     } catch (err) {
         res.status(500).json({ message: "Database error", error: err });
     }

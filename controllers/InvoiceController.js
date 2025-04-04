@@ -68,6 +68,7 @@ exports.addInvoice = async (req, res) => {
             await connection.commit();
             
             res.status(201).json({ 
+                success: true,
                 message: "Invoice added successfully", 
                 invoiceId,
                 user_id,

@@ -13,7 +13,13 @@ const getnotifications = async () => {
     return results;
 };
 
+const getnotificationsByStatus = async (status) => {
+    const [rows] = await db.query("SELECT * FROM notifications WHERE status = ?", [status]);
+    return rows;
+};
+
 module.exports = {
     createnotification,
-    getnotifications
+    getnotifications,
+    getnotificationsByStatus
 };

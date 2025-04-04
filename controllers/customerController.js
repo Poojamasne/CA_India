@@ -14,6 +14,7 @@ exports.addCustomerField = async (req, res) => {
         const [result] = await db.execute(sql, [field_name]);
 
         res.json({ 
+            success: true,
             message: "Customer field added successfully", 
             customer_field_id: result.insertId 
         });
