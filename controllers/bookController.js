@@ -60,45 +60,6 @@ exports.addBook = async (req, res) => {
 //     }
 // };
 
-// ✅ Add a new book and return user_id in response
-exports.addnewBook = async (req, res) => {
-    const { book_name, inventory_status, business_id, user_id } = req.body;
-
-    if (!book_name || inventory_status === undefined || !business_id || !user_id) {
-        return res.status(400).json({ 
-            success: false, 
-            message: "Book name, inventory status, business ID, and user ID are required" 
-        });
-    }
-
-    try {
-        const [result] = await db.query(
-            "INSERT INTO books (book_name, inventory_status, business_id, user_id, created_at) VALUES (?, ?, ?, ?, NOW())",
-            [book_name, inventory_status, business_id, user_id]
-        );
-
-        const bookId = result.insertId;
-
-        // Log the response before sending it
-        console.log("Response Data:", { success: true, message: "Book added successfully", book_id: bookId, user_id });
-
-        res.status(201).json({ 
-            success: true, 
-            message: "Book added successfully", 
-            book_id: bookId,
-            user_id: user_id  // ✅ Ensure this is included
-        });
-    } catch (err) {
-        res.status(500).json({ 
-            success: false, 
-            message: "Failed to add book", 
-            error: err.message 
-        });
-    }
-};
-
-
-
 
 // ✅ Get all books with member count
 exports.getBooks = async (req, res) => {
@@ -131,21 +92,6 @@ exports.getBooks = async (req, res) => {
     }
 };
 
-exports.getBookById = async (req, res) => {
-    const { book_id } = req.params;
-
-    try {
-        const [book] = await db.query("SELECT * FROM books WHERE book_id = ?", [book_id]);
-
-        if (book.length === 0) {
-            return res.status(404).json({ success: false, message: "Book not found" });
-        }
-
-        res.status(200).json({ success: true, data: book[0] });
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Failed to fetch book", error: err.message });
-    }
-};
 
 // ✅ Rename a book
 exports.renameBook = async (req, res) => {
@@ -213,63 +159,156 @@ exports.deleteBook = async (req, res) => {
     }
 };
 
-// ✅ Get all books by user ID
-// ✅ Get all books by user ID
-exports.getBooksByUserId = async (req, res) => {
-    const { user_id } = req.params;
 
-    if (!user_id || isNaN(user_id)) {
+// ✅ Add a new book (with user verification)
+exports.addnewBook = async (req, res) => {
+    const { book_name, inventory_status, business_id, user_id } = req.body;
+
+    if (!book_name || inventory_status === undefined || !business_id || !user_id) {
         return res.status(400).json({ 
             success: false, 
-            message: "Valid user ID is required" 
+            message: "Book name, inventory status, business ID, and user ID are required",
+            missing_fields: {
+                book_name: !book_name,
+                inventory_status: inventory_status === undefined,
+                business_id: !business_id,
+                user_id: !user_id
+            }
         });
     }
 
     try {
-        const [books] = await db.query(`
-            SELECT 
-                b.book_id, 
-                b.book_name, 
-                b.inventory_status, 
-                b.business_id, 
-                b.net_balance, 
-                b.receipt, 
-                b.payment, 
-                b.recent_entries_date, 
-                b.party_id, 
-                b.income_tax_challan, 
-                b.entry_by, 
-                b.entry_time, 
-                b.balance, 
-                b.created_at,
-                COUNT(m.member_name) AS member_count
-            FROM books b
-            LEFT JOIN book_members m ON b.book_id = m.book_id
-            WHERE b.entry_by = ?
-            GROUP BY b.book_id
-            ORDER BY b.created_at DESC
-        `, [parseInt(user_id)]);  // Ensure numeric user_id
+        // Verify user exists (optional additional check)
+        const [userCheck] = await db.query(
+            "SELECT id FROM users WHERE id = ?",
+            [user_id]
+        );
 
-        if (books.length === 0) {
-            return res.status(404).json({ 
-                success: true, 
-                message: "No books found for this user",
-                data: []
+        if (userCheck.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+                code: "USER_NOT_FOUND"
             });
         }
 
-        res.status(200).json({ 
+        const [result] = await db.query(
+            "INSERT INTO books (book_name, inventory_status, business_id, user_id, created_at) VALUES (?, ?, ?, ?, NOW())",
+            [book_name, inventory_status, business_id, user_id]
+        );
+
+        res.status(201).json({ 
             success: true, 
-            data: books 
+            message: "Book added successfully", 
+            book_id: result.insertId,
+            user_id: user_id,
+            timestamp: new Date().toISOString()
         });
     } catch (err) {
-        console.error("Error fetching books:", err);
+        console.error("Database error:", err);
         res.status(500).json({ 
             success: false, 
-            message: "Failed to fetch books", 
-            error: err.message 
+            message: "Failed to add book", 
+            error: err.message,
+            code: "BOOK_CREATION_FAILED"
         });
     }
 };
+
+// ✅ Get books by user ID
+exports.getBooksByUserId = async (req, res) => {
+    const { user_id } = req.params;
+
+    if (!user_id) {
+        return res.status(400).json({
+            success: false,
+            message: "User ID is required",
+            code: "USER_ID_REQUIRED"
+        });
+    }
+
+    try {
+        // Get all books for the specified user
+        const [books] = await db.query(
+            `SELECT 
+                book_id, 
+                book_name, 
+                inventory_status, 
+                business_id, 
+                created_at,
+                user_id
+             FROM books 
+             WHERE user_id = ?
+             ORDER BY created_at DESC`,
+            [user_id]
+        );
+
+        res.status(200).json({
+            success: true,
+            books: books,
+            count: books.length,
+            user_id: user_id
+        });
+    } catch (err) {
+        console.error("Database error:", err);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch books",
+            error: err.message,
+            code: "BOOK_FETCH_FAILED"
+        });
+    }
+};
+
+// ✅ Get single book with user verification
+exports.getBookById = async (req, res) => {
+    const { book_id, user_id } = req.params;
+
+    if (!book_id || !user_id) {
+        return res.status(400).json({
+            success: false,
+            message: "Book ID and User ID are required",
+            code: "IDS_REQUIRED"
+        });
+    }
+
+    try {
+        const [book] = await db.query(
+            `SELECT 
+                book_id, 
+                book_name, 
+                inventory_status, 
+                business_id, 
+                created_at,
+                user_id
+             FROM books 
+             WHERE book_id = ? AND user_id = ?`,
+            [book_id, user_id]
+        );
+
+        if (book.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Book not found or not owned by user",
+                code: "BOOK_NOT_FOUND"
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            book: book[0],
+            user_id: user_id
+        });
+    } catch (err) {
+        console.error("Database error:", err);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch book",
+            error: err.message,
+            code: "BOOK_FETCH_FAILED"
+        });
+    }
+};
+
 
 
