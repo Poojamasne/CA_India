@@ -215,28 +215,41 @@ exports.addnewBook = async (req, res) => {
     }
 };
 
-// ✅ Get books by user ID
+
+// ✅ Get books by user ID (using your actual table structure)
 exports.getBooksByUserId = async (req, res) => {
     const { user_id } = req.params;
 
-    if (!user_id) {
+    if (!user_id || isNaN(user_id)) {
         return res.status(400).json({
             success: false,
-            message: "User ID is required",
-            code: "USER_ID_REQUIRED"
+            message: "Valid user ID is required",
+            code: "INVALID_USER_ID"
         });
     }
 
     try {
-        // Get all books for the specified user
+        // Verify user exists - using 'name' instead of 'username'
+        const [user] = await db.query(
+            "SELECT id, name, email FROM users WHERE id = ?",
+            [user_id]
+        );
+
+        if (user.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+                code: "USER_NOT_FOUND"
+            });
+        }
+
+        // Get books with basic info
         const [books] = await db.query(
             `SELECT 
                 book_id, 
                 book_name, 
-                inventory_status, 
-                business_id, 
-                created_at,
-                user_id
+                inventory_status,
+                created_at
              FROM books 
              WHERE user_id = ?
              ORDER BY created_at DESC`,
@@ -245,10 +258,20 @@ exports.getBooksByUserId = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            books: books,
+            books: books.map(book => ({
+                ...book,
+                created_at: new Date(book.created_at).toLocaleString(),
+                inventory_status: Boolean(book.inventory_status)
+            })),
             count: books.length,
-            user_id: user_id
+            user_info: {
+                user_id: parseInt(user_id),
+                name: user[0].name,
+                email: user[0].email
+            },
+            timestamp: new Date().toISOString()
         });
+
     } catch (err) {
         console.error("Database error:", err);
         res.status(500).json({

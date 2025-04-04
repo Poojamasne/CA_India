@@ -40,6 +40,6 @@ router.post('/books/:book_id/referencer', verifyToken, referencerController.addR
 router.get('/books/:book_id/referencer', verifyToken, referencerController.getReferencer);
 
 // ✅ Get all books by user ID
-router.get("/user/:user_id",  verifyToken, bookController.getBooksByUserId);
+router.get("/books/user/:user_id",  verifyToken, bookController.getBooksByUserId);
 
 module.exports = router;
