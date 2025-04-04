@@ -14,7 +14,7 @@ const verifyToken = require('../middleware/auth'); // Ensure the path is correct
 
 
 // Add a new book
-router.post('/books', verifyToken, bookController.addBook);
+// router.post('/books', verifyToken, bookController.addBook);
 
 router.post('/books', verifyToken, bookController.addnewBook);
 
