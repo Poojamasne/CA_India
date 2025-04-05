@@ -21,8 +21,8 @@ router.post('/books', verifyToken, bookController.addnewBook);
 // Get all books
 router.get('/books', verifyToken, bookController.getBooks);
 
-//Get a book by id
-router.get('/books/:book_id', verifyToken, bookController.getBookById);
+//Get a single book by book_id and user_id
+router.get('/books/:book_id/:user_id', bookController.getBookById);
 
 // Rename a book
 router.put('/books/:book_id', verifyToken, bookController.renameBook);

@@ -46,6 +46,7 @@ exports.addpartyEntry = async (req, res) => {
         ]);
 
         res.status(201).json({ 
+            success: true,
             message: "Party added successfully",
             party_id: result.insertId,
             user_id: user_id
@@ -135,6 +136,7 @@ exports.updatepartyEntry = async (req, res) => {
         }
 
         res.json({ 
+            success: true,
             message: "Party updated successfully",
             party_id: id,
             user_id: user_id
@@ -179,6 +181,7 @@ exports.deletepartyEntry = async (req, res) => {
         }
 
         res.json({ 
+            success: true,
             message: "Party deleted successfully",
             party_id: id,
             user_id: user_id
