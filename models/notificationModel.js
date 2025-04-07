@@ -18,8 +18,29 @@ const getnotificationsByStatus = async (status) => {
     return rows;
 };
 
+
+const getnotificationsByStatusAndUser = async (status, user_id) => {
+    const [notifications] = await db.query(
+        "SELECT * FROM notifications WHERE status = ? AND user_id = ? ORDER BY created_at DESC",
+        [status, user_id]
+    );
+    return notifications;
+};
+
+const getnotificationsByUser = async (user_id) => {
+    const [notifications] = await db.query(
+        "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC",
+        [user_id]
+    );
+    return notifications;
+};
+
+
 module.exports = {
     createnotification,
     getnotifications,
-    getnotificationsByStatus
+    getnotificationsByStatus,
+    getnotificationsByStatusAndUser,
+    getnotificationsByUser
+
 };
