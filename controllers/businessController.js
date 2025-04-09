@@ -158,7 +158,7 @@ exports.getBusinessesByUserId = async (req, res) => {
     }
 
     try {
-        // Get businesses where user is the owner (user_id matches)
+        // Get businesses where user is the owner
         const [businesses] = await db.query(`
             SELECT 
                 b.business_id,
@@ -172,10 +172,39 @@ exports.getBusinessesByUserId = async (req, res) => {
             ORDER BY b.created_at DESC
         `, [parseInt(user_id)]);
 
+        // Get all business_ids to query book counts
+        const businessIds = businesses.map(b => b.business_id);
+
+        let bookCounts = {};
+
+        if (businessIds.length > 0) {
+            // Dynamically generate placeholders for IN clause
+            const placeholders = businessIds.map(() => '?').join(',');
+            
+            const [counts] = await db.query(`
+                SELECT business_id, COUNT(*) as bookCount
+                FROM books
+                WHERE business_id IN (${placeholders})
+                GROUP BY business_id
+            `, businessIds);
+
+            // Map book counts to business_id
+            bookCounts = counts.reduce((acc, curr) => {
+                acc[curr.business_id] = curr.bookCount;
+                return acc;
+            }, {});
+        }
+
+        // Append bookCount to each business
+        const businessDataWithCount = businesses.map(b => ({
+            ...b,
+            bookCount: bookCounts[b.business_id] || 0
+        }));
+
         res.status(200).json({
             success: true,
-            count: businesses.length,
-            data: businesses
+            count: businessDataWithCount.length,
+            data: businessDataWithCount
         });
 
     } catch (error) {
@@ -187,6 +216,7 @@ exports.getBusinessesByUserId = async (req, res) => {
         });
     }
 };
+
 
 // ✅ Get a Single Business by ID
 exports.getBusinessById = async (req, res) => {

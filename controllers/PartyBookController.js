@@ -2,65 +2,50 @@ const db = require('../db'); // Database connection
 
 // Link a party to a book
 exports.linkPartyToBook = async (req, res) => {
-    const { book_id, party_id } = req.body;
-
     try {
-        // Ensure party exists before updating
-        const partyCheckQuery = 'SELECT * FROM parties WHERE id = ?';
-        const [partyCheckResult] = await db.query(partyCheckQuery, [party_id]);
-
-        if (partyCheckResult.length === 0) {
-            return res.status(404).json({ message: 'Party not found' });
+        const { book_id, party_ids } = req.body;
+        if (!book_id || !Array.isArray(party_ids)) {
+            return res.status(400).json({ error: "book_id and party_ids array are required" });
         }
 
-        // Update book record to link to a party
-        const updateQuery = 'UPDATE books SET party_id = ? WHERE book_id = ?';
-        const [updateResult] = await db.query(updateQuery, [party_id, book_id]);
+        // ✅ Fetch existing party_ids
+        const [existing] = await db.query(`SELECT id FROM parties WHERE id IN (?)`, [party_ids]);
+        const existingIds = existing.map(p => p.id);
 
-        if (updateResult.affectedRows === 0) {
-            return res.status(404).json({ message: 'Book not found' });
+        const invalidIds = party_ids.filter(id => !existingIds.includes(id));
+
+        if (existingIds.length > 0) {
+            const values = existingIds.map(party_id => [book_id, party_id]);
+            await db.query(`INSERT IGNORE INTO book_party_link (book_id, party_id) VALUES ?`, [values]);
         }
 
-        res.status(200).json({ message: 'Party linked to book successfully' });
+        res.json({
+            success: true,
+            message: "Parties processed",
+            linked: existingIds,
+            invalid: invalidIds
+        });
+
     } catch (error) {
-        console.error('Error linking party to book:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        console.error("Error linking parties:", error);
+        res.status(500).json({ error: error.message });
     }
 };
+
 
 exports.getPartyByBook = async (req, res) => {
-    const bookId = parseInt(req.params.bookId, 10);
-
     try {
-        // Fetch book details
-        const bookQuery = 'SELECT * FROM books WHERE book_id = ?';
-        const [bookResult] = await db.query(bookQuery, [bookId]);
+        const { bookId } = req.params;
 
-        if (bookResult.length === 0) {
-            return res.status(404).json({ message: 'Book not found' });
-        }
+        const [parties] = await db.execute(`
+            SELECT p.* FROM book_party_link bpl
+            JOIN parties p ON bpl.party_id = p.id
+            WHERE bpl.book_id = ?`, [bookId]);
 
-        const book = bookResult[0];
+        res.json({ book_id: bookId, linked_parties: parties });
 
-        // If no party is linked, return book only
-        if (!book.party_id) {
-            return res.json({ book, message: 'No party linked to this book' });
-        }
-
-        // Fetch party details
-        const partyQuery = 'SELECT * FROM parties WHERE id = ?';
-        const [partyResult] = await db.query(partyQuery, [book.party_id]);
-
-        if (partyResult.length === 0) {
-            return res.status(404).json({ message: 'Party not found' });
-        }
-
-        const party = partyResult[0];
-
-        res.json({ book, party });
     } catch (error) {
-        console.error('Error fetching party for book:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        console.error("Error fetching parties for book:", error);
+        res.status(500).json({ error: error.message });
     }
 };
-

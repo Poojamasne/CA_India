@@ -115,12 +115,15 @@ exports.renameBook = async (req, res) => {
     }
 };
 
-// ✅ Add a member to a book
+// ✅ Add a member to a book with phone number
 exports.addMember = async (req, res) => {
-    const { book_id, member_name } = req.body;
+    const { book_id, member_name, phone_number } = req.body;
 
-    if (!book_id || !member_name) {
-        return res.status(400).json({ success: false, message: "Book ID and Member Name are required" });
+    if (!book_id || !member_name || !phone_number) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Book ID, Member Name, and Phone Number are required" 
+        });
     }
 
     try {
@@ -128,18 +131,100 @@ exports.addMember = async (req, res) => {
         const [book] = await db.query("SELECT book_id FROM books WHERE book_id = ?", [book_id]);
 
         if (book.length === 0) {
-            return res.status(404).json({ success: false, message: "Book ID does not exist" });
+            return res.status(404).json({ 
+                success: false, 
+                message: "Book ID does not exist" 
+            });
         }
 
-        // Insert the member if the book exists
-        await db.query("INSERT INTO book_members (book_id, member_name) VALUES (?, ?)", 
-                      [book_id, member_name]);
+        // Insert the member with phone number
+        await db.query(
+            "INSERT INTO book_members (book_id, member_name, phone_number) VALUES (?, ?, ?)", 
+            [book_id, member_name, phone_number]
+        );
 
-        res.status(201).json({ success: true, message: "Member added successfully" });
+        res.status(201).json({ 
+            success: true, 
+            message: "Member added successfully" 
+        });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Failed to add member", error: err.message });
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to add member", 
+            error: err.message 
+        });
     }
 };
+
+// 📌 Get all members by book_id
+exports.getAllMembersByBookId = async (req, res) => {
+    const { book_id } = req.params;
+
+    if (!book_id) {
+        return res.status(400).json({ success: false, message: "Book ID is required" });
+    }
+
+    try {
+        const [members] = await db.query(
+            `SELECT id, member_name, phone_number 
+             FROM book_members 
+             WHERE book_id = ?`, 
+            [book_id]
+        );
+
+        res.json({
+            success: true,
+            book_id,
+            members,
+            count: members.length
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to fetch members", error: err.message });
+    }
+};
+
+
+exports.deleteMember = async (req, res) => {
+    const { book_id, member_name } = req.params;
+
+    if (!book_id || !member_name) {
+        return res.status(400).json({ success: false, message: "Book ID and Member Name are required" });
+    }
+
+    try {
+        const [result] = await db.query("DELETE FROM book_members WHERE book_id = ? AND member_name = ?", [book_id, member_name]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: "Member not found" });
+        }
+
+        res.status(200).json({ success: true, message: "Member deleted successfully" });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to delete member", error: err.message });
+    }
+};
+    
+// Delete member by ID
+exports.deleteMemberbyID = async (req, res) => {
+    const { member_id } = req.params;
+
+    if (!member_id) {
+        return res.status(400).json({ success: false, message: "Member ID is required" });
+    }
+
+    try {
+        const [result] = await db.query("DELETE FROM book_members WHERE id = ?", [member_id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: "Member not found" });
+        }
+
+        res.json({ success: true, message: "Member deleted successfully" });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to delete member", error: err.message });
+    }
+};
+
 
 
 // ✅ Delete a book
@@ -158,6 +243,8 @@ exports.deleteBook = async (req, res) => {
         res.status(500).json({ success: false, message: "Failed to delete book", error: err.message });
     }
 };
+
+
 
 
 // // ✅ Get single book with user verification

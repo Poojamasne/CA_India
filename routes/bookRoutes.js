@@ -30,6 +30,15 @@ router.put('/books/:book_id', verifyToken, bookController.renameBook);
 // Add a member to a book
 router.post('/books/members', verifyToken, bookController.addMember);
 
+
+// GET API to fetch all members by book_id
+router.get('/members/:book_id', verifyToken, bookController.getAllMembersByBookId);
+
+router.delete('/members/:member_id', verifyToken, bookController.deleteMemberbyID);
+
+router.delete('/books/:book_id/members/:member_name',verifyToken, bookController.deleteMember);
+
+
 // Delete a book
 router.delete('/books/:book_id', verifyToken, bookController.deleteBook);
 
