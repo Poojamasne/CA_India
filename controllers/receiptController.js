@@ -79,14 +79,7 @@ exports.addReceiptEntry = async (req, res) => {
 // 📌 Get all receipt entries (ASYNC/AWAIT)
 exports.getAllReceipts = async (req, res) => {
     try {
-        // Option 1: Get all receipts for all users (admin view)
-        // const [results] = await db.execute(
-        //     "SELECT *, DATE_FORMAT(created_at, '%d %b %Y') AS date, 
-        //     DATE_FORMAT(created_at, '%h:%i %p') AS time FROM receipt_entries"
-        // );
-
-        // Option 2: Get receipts for specific user (common case)
-        const { user_id } = req.query;  // Get user_id from query params
+        const { user_id } = req.query;
         if (!user_id) {
             return res.status(400).json({ error: "user_id is required" });
         }
@@ -95,13 +88,22 @@ exports.getAllReceipts = async (req, res) => {
             `SELECT *, 
              DATE_FORMAT(created_at, '%d %b %Y') AS date, 
              DATE_FORMAT(created_at, '%h:%i %p') AS time 
-             FROM receipt_entries WHERE user_id = ?`,
+             FROM receipt_entries 
+             WHERE user_id = ?`,
             [user_id]
         );
 
+        // Optional: Modify status based on receipt_type or any other logic
+        const receiptsWithStatus = results.map(receipt => ({
+            ...receipt,
+            status: receipt.status || (
+                receipt.receipt_type === 'receipt' ? 'credit' : 'debit'
+            )
+        }));
+
         res.json({ 
-            receipts: results,
-            count: results.length,
+            receipts: receiptsWithStatus,
+            count: receiptsWithStatus.length,
             user_id: user_id
         });
 
@@ -112,6 +114,7 @@ exports.getAllReceipts = async (req, res) => {
         });
     }
 };
+
 
 // 📌 Delete a receipt entry (ASYNC/AWAIT)
 exports.deleteReceiptEntry = async (req, res) => {
