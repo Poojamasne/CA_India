@@ -1,76 +1,155 @@
-const db = require('../db'); // Import database connection
+const db = require('../db');
 
-// ✅ Add a New Customer Field
+// POST - Create a new customer field
+// POST - Create a new customer field
 exports.addCustomerField = async (req, res) => {
     try {
-        const { field_name } = req.body;
+        const { field_name, user_id, book_id } = req.body;
 
-        if (!field_name) {
-            return res.status(400).json({ error: "Customer field name is required." });
+        // Validation
+        if (!field_name?.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Field name is required",
+                code: "FIELD_NAME_REQUIRED"
+            });
         }
 
-        const sql = `INSERT INTO customer_fields (field_name) VALUES (?)`;
+        if (!user_id || isNaN(user_id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid user ID is required",
+                code: "INVALID_USER_ID"
+            });
+        }
 
-        const [result] = await db.execute(sql, [field_name]);
+        if (!book_id || isNaN(book_id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid book ID is required",
+                code: "INVALID_BOOK_ID"
+            });
+        }
 
-        res.json({ 
+        const [result] = await db.execute(
+            `INSERT INTO customer_fields (field_name, user_id, book_id) 
+             VALUES (?, ?, ?)`,
+            [field_name.trim(), parseInt(user_id), parseInt(book_id)]
+        );
+
+        return res.status(201).json({
             success: true,
-            message: "Customer field added successfully", 
-            customer_field_id: result.insertId 
+            message: "Customer field created",
+            data: {
+                id: result.insertId,
+                field_name: field_name.trim(),
+                user_id: parseInt(user_id),
+                book_id: parseInt(book_id)
+            }
         });
 
     } catch (error) {
-        console.error("Error adding customer field:", error);
-        res.status(500).json({ error: error.message });
+        console.error("Create error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to create field",
+            code: "DATABASE_ERROR"
+        });
     }
 };
 
-// ✅ Get Customer Field for a Specific Book
-exports.getCustomerFieldByBook = async (req, res) => {
+
+exports.getAllCustomerFields = async (req, res) => {
+    try {
+        const [fields] = await db.execute(
+            `SELECT * FROM customer_fields`
+        );
+
+        res.json({
+            success: true,
+            count: fields.length,
+            data: fields
+        });
+
+    } catch (error) {
+        console.error("Error fetching customer fields:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch customer fields",
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// GET - Get fields by book_id and user_id
+exports.getFieldsByBookAndUser = async (req, res) => {
+    try {
+        const { book_id, user_id } = req.params;
+
+        if (!book_id || !user_id || isNaN(book_id) || isNaN(user_id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid book ID and user ID are required",
+                code: "INVALID_IDS"
+            });
+        }
+
+        const [results] = await db.execute(
+            `SELECT id, field_name, user_id, book_id
+             FROM customer_fields
+             WHERE book_id = ? AND user_id = ?`,
+            [parseInt(book_id), parseInt(user_id)]
+        );
+
+        return res.json({
+            success: true,
+            count: results.length,
+            data: results
+        });
+
+    } catch (error) {
+        console.error("Get by book/user error:", error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch fields",
+            code: "DATABASE_ERROR"
+        });
+    }
+};
+
+
+// GET - Get all customer fields by book_id
+exports.getFieldsByBookId = async (req, res) => {
     try {
         const { book_id } = req.params;
 
-        if (!book_id) {
-            return res.status(400).json({ error: "Book ID is required." });
+        if (!book_id || isNaN(book_id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid book ID is required",
+                code: "INVALID_BOOK_ID"
+            });
         }
 
-        const sql = `
-            SELECT 
-                b.book_id, 
-                b.book_name, 
-                b.business_id, 
-                b.inventory_status, 
-                b.net_balance, 
-                b.receipt, 
-                b.payment, 
-                b.recent_entries_date, 
-                b.party_id, 
-                b.income_tax_challan, 
-                b.entry_by, 
-                b.entry_time, 
-                b.balance, 
-                b.created_at, 
-                b.referencer, 
-                b.category_id,
-                cf.id AS customer_field_id,
-                cf.field_name AS customer_field_name
-            FROM books b
-            LEFT JOIN parties p ON b.party_id = p.id
-            LEFT JOIN customer_fields cf ON p.customer_field = cf.field_name
-            WHERE b.book_id = ?
-        `;
+        const [fields] = await db.execute(
+            `SELECT id, field_name, user_id, book_id 
+             FROM customer_fields 
+             WHERE book_id = ?`,
+            [parseInt(book_id)]
+        );
 
-        const [result] = await db.execute(sql, [book_id]);
-
-        if (result.length === 0) {
-            return res.status(404).json({ error: "No records found for the given book ID." });
-        }
-
-        res.json(result[0]);
+        return res.json({
+            success: true,
+            count: fields.length,
+            data: fields
+        });
 
     } catch (error) {
-        console.error("Error fetching customer field for book:", error);
-        res.status(500).json({ error: error.message });
+        console.error("Error fetching customer fields by book_id:", error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch customer fields",
+            code: "DATABASE_ERROR"
+        });
     }
 };
-
