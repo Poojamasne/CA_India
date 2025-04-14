@@ -10,11 +10,20 @@ const validMeasurements = [
 
 exports.addItem = async (req, res) => {
     try {
-        const { item_name, quantity_measurement, gst_rate, opening_stock, opening_stock_date, hsn_code } = req.body;
+        const {
+            item_name,
+            quantity_measurement,
+            gst_rate,
+            opening_stock,
+            opening_stock_date,
+            hsn_code,
+            user_id,
+            book_id
+        } = req.body;
 
         // Check for required fields
-        if (!item_name || !quantity_measurement || !gst_rate || !opening_stock || !opening_stock_date || !hsn_code) {
-            return res.status(400).json({ message: "All fields are required" });
+        if (!item_name || !quantity_measurement || !gst_rate || !opening_stock || !opening_stock_date || !hsn_code || !user_id || !book_id) {
+            return res.status(400).json({ message: "All fields including user_id and book_id are required" });
         }
 
         // Validate quantity measurement
@@ -22,16 +31,38 @@ exports.addItem = async (req, res) => {
             return res.status(400).json({ message: "Invalid quantity measurement unit" });
         }
 
+        // Optional: Validate book and user exist
+        const [[bookExists]] = await db.query("SELECT book_id FROM books WHERE book_id = ?", [book_id]);
+        if (!bookExists) {
+            return res.status(404).json({ message: "Book not found" });
+        }
+
+        const [[userExists]] = await db.query("SELECT id FROM users WHERE id = ?", [user_id]);
+        if (!userExists) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
         // Insert into database
-        const sql = "INSERT INTO items (item_name, quantity_measurement, gst_rate, opening_stock, opening_stock_date, hsn_code) VALUES (?, ?, ?, ?, ?, ?)";
-        const values = [item_name, quantity_measurement, gst_rate, opening_stock, opening_stock_date, hsn_code];
+        const sql = `
+            INSERT INTO items 
+            (item_name, quantity_measurement, gst_rate, opening_stock, opening_stock_date, hsn_code, user_id, book_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+
+        const values = [item_name, quantity_measurement, gst_rate, opening_stock, opening_stock_date, hsn_code, user_id, book_id];
 
         const [result] = await db.query(sql, values);
-        res.status(201).json({ success: true, message: "Item added successfully", item_id: result.insertId });
+
+        res.status(201).json({
+            success: true,
+            message: "Item added successfully",
+            item_id: result.insertId
+        });
     } catch (err) {
-        res.status(500).json({ message: "Database error", error: err });
+        console.error("Add item error:", err);
+        res.status(500).json({ message: "Database error", error: err.message });
     }
 };
+
 
 // Get all items
 exports.getItems = async (req, res) => {
@@ -71,3 +102,62 @@ exports.deleteItem = async (req, res) => {
         res.status(500).json({ message: "Database error", error: err });
     }
 };
+
+// ✅ GET: Get Items by user_id and book_id
+exports.getItemsByUserAndBook = async (req, res) => {
+    try {
+        const { user_id, book_id } = req.query;
+
+        // 1. Check if parameters exist
+        if (!user_id || !book_id) {
+            return res.status(400).json({
+                success: false,
+                message: "Both `user_id` and `book_id` are required.",
+            });
+        }
+
+        // 2. Check if user exists
+        const [[user]] = await db.query("SELECT id FROM users WHERE id = ?", [user_id]);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found.",
+            });
+        }
+
+        // 3. Check if book exists (and belongs to user)
+        const [[book]] = await db.query(
+            "SELECT book_id FROM books WHERE book_id = ? AND user_id = ?",
+            [book_id, user_id]
+        );
+        if (!book) {
+            return res.status(404).json({
+                success: false,
+                message: "Book not found or does not belong to this user.",
+            });
+        }
+
+        // 4. Fetch items
+        const [items] = await db.query(
+            `SELECT * FROM items WHERE user_id = ? AND book_id = ?`,
+            [user_id, book_id]
+        );
+
+        // 5. Return items (even if empty)
+        return res.status(200).json({
+            success: true,
+            count: items.length,
+            items,
+        });
+
+    } catch (err) {
+        console.error("Error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Server error while fetching items.",
+            error: err.message,
+        });
+    }
+};
+
+

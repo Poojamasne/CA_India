@@ -606,3 +606,124 @@ exports.getAllBooksByUserId = async (req, res) => {
         });
     }
 };
+
+
+exports.getAllBooksByUserAndBusinessId = async (req, res) => {
+    const { user_id } = req.params;
+    const { business_id } = req.query; // or req.params if passed as a param
+
+    // 🛑 Validate User ID
+    if (!user_id || isNaN(user_id)) {
+        return res.status(400).json({
+            success: false,
+            message: "Valid user ID is required",
+            code: "INVALID_USER_ID"
+        });
+    }
+
+    // 🛑 Validate Business ID
+    if (!business_id || isNaN(business_id)) {
+        return res.status(400).json({
+            success: false,
+            message: "Valid business ID is required",
+            code: "INVALID_BUSINESS_ID"
+        });
+    }
+
+    try {
+        // ✅ Verify user exists
+        const [user] = await db.query(
+            "SELECT id, name, email FROM users WHERE id = ?",
+            [user_id]
+        );
+
+        if (user.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+                code: "USER_NOT_FOUND"
+            });
+        }
+
+        // ✅ Get books for specific user and business
+        const [books] = await db.query(
+            `SELECT 
+                book_id, 
+                book_name, 
+                inventory_status, 
+                business_id,
+                net_balance,
+                receipt,
+                payment,
+                recent_entries_date,
+                party_id,
+                income_tax_challan,
+                entry_by,
+                entry_time,
+                balance,
+                created_at,
+                referencer,
+                category_id,
+                head_account_id
+             FROM books 
+             WHERE user_id = ? AND business_id = ?
+             ORDER BY created_at DESC`,
+            [user_id, business_id]
+        );
+
+        if (books.length === 0) {
+            return res.status(200).json({
+                success: true,
+                books: [],
+                count: 0,
+                user_info: {
+                    user_id: parseInt(user_id),
+                    name: user[0].name,
+                    email: user[0].email
+                },
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // ✅ Get member counts for all books
+        const [memberCounts] = await db.query(
+            `SELECT book_id, COUNT(*) as member_count 
+             FROM book_members 
+             WHERE book_id IN (?) 
+             GROUP BY book_id`,
+            [books.map(book => book.book_id)]
+        );
+
+        const memberCountMap = {};
+        memberCounts.forEach(mc => {
+            memberCountMap[mc.book_id] = mc.member_count;
+        });
+
+        // ✅ Final response
+        res.status(200).json({
+            success: true,
+            books: books.map(book => ({
+                ...book,
+                created_at: new Date(book.created_at).toLocaleString(),
+                inventory_status: Boolean(book.inventory_status),
+                member_count: memberCountMap[book.book_id] || 0
+            })),
+            count: books.length,
+            user_info: {
+                user_id: parseInt(user_id),
+                name: user[0].name,
+                email: user[0].email
+            },
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (err) {
+        console.error("Database error:", err);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch books",
+            error: err.message,
+            code: "BOOK_FETCH_FAILED"
+        });
+    }
+};

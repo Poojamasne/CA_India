@@ -50,4 +50,7 @@ router.get('/books/:book_id/referencer', verifyToken, referencerController.getRe
 
 router.get("/user/:user_id", verifyToken, bookController.getAllBooksByUserId);
 
+// GET all books by user_id and business_id (passed as query)
+router.get('/books/:user_id', bookController.getAllBooksByUserAndBusinessId);
+
 module.exports = router;

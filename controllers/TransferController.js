@@ -15,16 +15,37 @@ const generateTransferNumber = async () => {
 
 // ✅ POST: Add Transfer
 exports.addTransfer = async (req, res) => {
-    const { date, recipient, sender, amount } = req.body;
+    const { date, recipient, sender, amount, book_id } = req.body;
 
-    if (!date || !recipient || !sender || !amount) {
-        return res.status(400).json({ message: "All fields are required" });
+    // 🔍 Validate required fields
+    if (!date || !recipient || !sender || !amount || !book_id) {
+        return res.status(400).json({ 
+            success: false,
+            message: "All fields including book_id are required" 
+        });
+    }
+
+    // ✅ Optional: Validate book existence (recommended)
+    const [bookCheck] = await db.query(
+        "SELECT book_id FROM books WHERE book_id = ?",
+        [book_id]
+    );
+
+    if (bookCheck.length === 0) {
+        return res.status(404).json({
+            success: false,
+            message: "Book not found",
+            code: "BOOK_NOT_FOUND"
+        });
     }
 
     try {
         const transferNo = await generateTransferNumber();
-        const sql = "INSERT INTO transfers (transfer_no, date, recipient, sender, amount) VALUES (?, ?, ?, ?, ?)";
-        const values = [transferNo, date, recipient, sender, amount];
+        const sql = `
+            INSERT INTO transfers 
+                (transfer_no, date, recipient, sender, amount, book_id) 
+            VALUES (?, ?, ?, ?, ?, ?)`;
+        const values = [transferNo, date, recipient, sender, amount, book_id];
 
         const [result] = await db.query(sql, values);
 
@@ -32,11 +53,16 @@ exports.addTransfer = async (req, res) => {
             success: true,
             message: "Transfer added successfully",
             transfer_no: transferNo,
-            id: result.insertId // ✅ Return the inserted transfer ID
+            transfer_id: result.insertId
         });
 
     } catch (error) {
-        res.status(500).json({ message: "Database error", error: error.message });
+        console.error("Transfer insert error:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Database error", 
+            error: error.message 
+        });
     }
 };
 
