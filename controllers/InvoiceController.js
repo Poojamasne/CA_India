@@ -7,15 +7,17 @@ exports.addInvoice = async (req, res) => {
             type, 
             customer_or_supplier, 
             invoice_date, 
-            discount_amount, 
-            percentage, 
-            round_off, 
+            discount_amount = 0.00, 
+            percentage = "0%", 
+            round_off = 0.00, 
             items,
-            user_id  // Added user_id
+            user_id,
+            book_id,
+            bank_account_id
         } = req.body;
 
-        // Validate required fields including user_id
-        if (!type || !customer_or_supplier || !invoice_date || !user_id || !items || items.length === 0) {
+        // Validate required fields
+        if (!type || !customer_or_supplier || !invoice_date || !user_id || !Array.isArray(items) || items.length === 0 || !book_id || !bank_account_id) {
             return res.status(400).json({ 
                 error: "Missing required fields",
                 missing_fields: {
@@ -23,38 +25,40 @@ exports.addInvoice = async (req, res) => {
                     customer_or_supplier: !customer_or_supplier,
                     invoice_date: !invoice_date,
                     user_id: !user_id,
-                    items: !items || items.length === 0
+                    items: !items || items.length === 0,
+                    book_id: !book_id,
+                    bank_account_id: !bank_account_id
                 }
             });
         }
 
-        // Calculate amounts
+        // Calculate total values
         let total_taxable = items.reduce((sum, item) => sum + parseFloat(item.taxable_amount || 0), 0);
         let total_cgst = (total_taxable * 9) / 100;
         let total_sgst = (total_taxable * 9) / 100;
         let total_igst = (total_taxable * 18) / 100;
-        let total_amount = total_taxable + total_cgst + total_sgst - (discount_amount || 0) + (round_off || 0);
+        let total_amount = total_taxable + total_cgst + total_sgst - discount_amount + round_off;
 
-        // Insert invoice with user_id
-        const [result] = await db.query(
-            `INSERT INTO invoices 
-                (type, customer_or_supplier, invoice_date, total_taxable, 
-                 cgst, sgst, igst, total_amount, discount_amount, 
-                 percentage, round_off, user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [type, customer_or_supplier, invoice_date, total_taxable, 
-             total_cgst, total_sgst, total_igst, total_amount, 
-             discount_amount, percentage, round_off, user_id]
-        );
-
-        const invoiceId = result.insertId;
-
-        // Insert items with transaction
         const connection = await db.getConnection();
         try {
             await connection.beginTransaction();
 
-            for (let item of items) {
+            // Insert invoice
+            const [invoiceResult] = await connection.query(
+                `INSERT INTO invoices 
+                    (type, customer_or_supplier, invoice_date, total_taxable, 
+                     cgst, sgst, igst, total_amount, discount_amount, 
+                     percentage, round_off, user_id, book_id, bank_account_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [type, customer_or_supplier, invoice_date, total_taxable, 
+                 total_cgst, total_sgst, total_igst, total_amount, 
+                 discount_amount, percentage, round_off, user_id, book_id, bank_account_id]
+            );
+
+            const invoiceId = invoiceResult.insertId;
+
+            // Insert invoice items
+            for (const item of items) {
                 await connection.query(
                     `INSERT INTO invoice_items 
                         (invoice_id, item_name, hsn_code, quantity_unit, 
@@ -66,7 +70,7 @@ exports.addInvoice = async (req, res) => {
             }
 
             await connection.commit();
-            
+
             res.status(201).json({ 
                 success: true,
                 message: "Invoice added successfully", 
@@ -77,8 +81,8 @@ exports.addInvoice = async (req, res) => {
                     cgst: total_cgst,
                     sgst: total_sgst,
                     igst: total_igst,
-                    discount: discount_amount || 0,
-                    round_off: round_off || 0,
+                    discount: discount_amount,
+                    round_off: round_off,
                     grand_total: total_amount
                 }
             });
@@ -93,12 +97,14 @@ exports.addInvoice = async (req, res) => {
     } catch (error) {
         console.error("Error adding invoice:", error);
         res.status(500).json({ 
-            error: error.message,
+            error: error.message || "Internal Server Error",
             sqlError: error.sqlMessage,
             code: "INVOICE_CREATION_FAILED"
         });
     }
 };
+
+
 
 // ✅ Get all invoices (filtered by user_id and optionally by type)
 exports.getInvoices = async (req, res) => {

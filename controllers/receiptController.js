@@ -11,70 +11,75 @@ exports.addReceiptEntry = async (req, res) => {
         const {
             receipt_type,
             amount,
-            party,
+            party_id,
             remark,
-            category_split,
-            customer_field,
+            category_split,   // Array of objects: [{ name: "Rent", amount: 500 }]
+            customer_field_id,
             payment_mode,
             selected_bank,
-            user_id  // Added user_id to the destructured request body
+            user_id,
+            book_id
         } = req.body;
 
-        // Include user_id in required fields check
-        if (!receipt_type || !amount || !party || !payment_mode || !user_id) {
-            return res.status(400).json({ 
+        // Check required fields
+        if (!receipt_type || !amount || !party_id || !payment_mode || !user_id || !book_id || !category_split) {
+            return res.status(400).json({
                 error: "Missing required fields",
                 missing: {
                     receipt_type: !receipt_type,
                     amount: !amount,
-                    party: !party,
+                    party_id: !party_id,
                     payment_mode: !payment_mode,
-                    user_id: !user_id
+                    user_id: !user_id,
+                    book_id: !book_id,
+                    category_split: !category_split
                 }
             });
         }
 
-        // Generate a unique receipt number
+        // Generate unique receipt number
         const receipt_no = generateReceiptNo();
 
-        // SQL Query to insert a new receipt (added user_id)
-        const sql = `INSERT INTO receipt_entries 
-            (receipt_no, receipt_type, amount, party, remark, category_split, 
-             customer_field, payment_mode, selected_bank, user_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`;
+        // Insert receipt into receipt_entries
+        const sql = `
+            INSERT INTO receipt_entries 
+            (receipt_no, receipt_type, amount, party_id, remark, category_split, 
+             customer_field_id, payment_mode, selected_bank, user_id, book_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        `;
 
-        // Execute SQL Query (added user_id to parameters)
+        // Stringify category_split to store in one column (if storing as JSON)
+        const categoryJson = JSON.stringify(category_split);
+
         const [result] = await db.execute(sql, [
-            receipt_no, receipt_type, amount, party, remark, 
-            category_split, customer_field, payment_mode, 
-            selected_bank, user_id
+            receipt_no, receipt_type, amount, party_id, remark, 
+            categoryJson, customer_field_id, payment_mode, 
+            selected_bank, user_id, book_id
         ]);
 
-        res.json({ 
+        res.status(201).json({
             success: true,
             message: "Receipt entry added successfully",
             receipt_id: result.insertId,
-            receipt_no: receipt_no,
-            user_id: user_id,  // Include user_id in response
-            date: new Date().toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: '2-digit', 
-                year: 'numeric' 
+            receipt_no,
+            user_id,
+            book_id,
+            date: new Date().toLocaleDateString('en-US', {
+                month: 'short', day: '2-digit', year: 'numeric'
             }),
-            time: new Date().toLocaleTimeString('en-US', { 
-                hour: '2-digit', 
-                minute: '2-digit', 
-                hour12: true 
+            time: new Date().toLocaleTimeString('en-US', {
+                hour: '2-digit', minute: '2-digit', hour12: true
             })
         });
 
     } catch (error) {
-        res.status(500).json({ 
+        res.status(500).json({
             error: error.message,
-            sqlError: error.sqlMessage  // Include SQL error details if available
+            sqlError: error.sqlMessage || null
         });
     }
 };
+
 
 // 📌 Get all receipt entries (ASYNC/AWAIT)
 exports.getAllReceipts = async (req, res) => {

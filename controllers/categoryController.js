@@ -14,11 +14,25 @@ const CATEGORY_GROUPS = [
 
 // ✅ Get all categories
 const getAllCategories = async (req, res) => {
+    const { user_id } = req.query;
+
+    if (!user_id) {
+        return res.status(400).json({ message: "user_id is required" });
+    }
+
     try {
-        const [results] = await db.query("SELECT * FROM categories");
-        res.json(results);
+        const [categories] = await db.query(
+            "SELECT * FROM categories WHERE user_id = ?",
+            [user_id]
+        );
+
+        res.status(200).json({
+            success: true,
+            count: categories.length,
+            categories
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ message: "Database error", error: err.message });
     }
 };
 
@@ -56,12 +70,13 @@ const addCategoryGroup = async (req, res) => {
 
 // ✅ Create a new category
 const createCategory = async (req, res) => {
-    const { category_name, amount, category_group } = req.body;
-    
-    if (!category_name || amount === undefined || !category_group) {
-        return res.status(400).json({ message: "Category name, amount, and category group are required" });
+    const { category_name, amount, category_group, user_id } = req.body;
+
+    if (!category_name || amount === undefined || !category_group || !user_id) {
+        return res.status(400).json({ message: "Category name, amount, category group, and user ID are required" });
     }
 
+    // Validate group
     const [dynamicGroups] = await db.query("SELECT group_name FROM category_groups");
     const allGroups = [...CATEGORY_GROUPS, ...dynamicGroups.map(g => g.group_name)];
 
@@ -71,18 +86,19 @@ const createCategory = async (req, res) => {
 
     try {
         const [result] = await db.query(
-            "INSERT INTO categories (category_name, amount, category_group) VALUES (?, ?, ?)", 
-            [category_name, amount, category_group]
+            "INSERT INTO categories (category_name, amount, category_group, user_id) VALUES (?, ?, ?, ?)",
+            [category_name, amount, category_group, user_id]
         );
         res.status(201).json({
             success: true,
             message: "Category added successfully",
-            category: { id: result.insertId, category_name, amount, category_group }
+            category: { id: result.insertId, category_name, amount, category_group, user_id }
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
+
 
 // ✅ Update category amount
 const updateCategoryAmount = async (req, res) => {
