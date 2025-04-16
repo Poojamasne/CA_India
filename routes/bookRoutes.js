@@ -46,4 +46,10 @@ router.get("/user/:user_id", verifyToken, bookController.getAllBooksByUserId);
 // GET all books by user_id and business_id (passed as query)
 router.get('/books/:user_id', bookController.getAllBooksByUserAndBusinessId);
 
+
+router.post("/books/:book_id/add-grade", verifyToken, bookController.addGradeToBook);
+
+router.post('/books/head-account/link', verifyToken, bookController.linkHeadAccountToBook);
+
+
 module.exports = router;

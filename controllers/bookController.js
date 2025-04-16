@@ -727,3 +727,80 @@ exports.getAllBooksByUserAndBusinessId = async (req, res) => {
         });
     }
 };
+
+
+exports.addGradeToBook = async (req, res) => {
+    const { book_id } = req.params;
+    const { grade } = req.body;
+
+    if (!book_id || !grade) {
+        return res.status(400).json({
+            success: false,
+            message: "Book ID and grade are required"
+        });
+    }
+
+    try {
+        const [result] = await db.execute(
+            "UPDATE books SET grade = ? WHERE book_id = ?",
+            [grade, book_id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Book not found"
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Grade added to book successfully",
+            book_id,
+            grade
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Failed to add grade",
+            error: error.message
+        });
+    }
+};
+
+// ✅ POST: Link head account to a book
+exports.linkHeadAccountToBook = async (req, res) => {
+    const { book_id, head_account_id } = req.body;
+
+    if (!book_id || !head_account_id) {
+        return res.status(400).json({
+            success: false,
+            message: "Book ID and Head Account ID are required"
+        });
+    }
+
+    try {
+        const [result] = await db.query(
+            "UPDATE books SET head_account_id = ? WHERE book_id = ?",
+            [head_account_id, book_id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Book not found"
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Head account linked to book successfully"
+        });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: "Failed to link head account",
+            error: err.message
+        });
+    }
+};
