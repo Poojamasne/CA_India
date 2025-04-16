@@ -48,6 +48,15 @@ exports.addReferencer = async (req, res) => {
 // Get referencer for a book
 exports.getReferencer = async (req, res) => {
     const { book_id } = req.params;
+    const { user_id } = req.query;
+
+    if (!book_id || !user_id) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Valid Book ID and User ID are required", 
+            code: "IDS_REQUIRED" 
+        });
+    }
 
     try {
         const [result] = await db.query(`
@@ -70,7 +79,7 @@ exports.getReferencer = async (req, res) => {
                 COUNT(m.member_name) AS member_count
             FROM books b
             LEFT JOIN book_members m ON b.book_id = m.book_id
-            WHERE b.book_id = ?
+            WHERE b.book_id = ? 
             GROUP BY b.book_id
         `, [book_id]);
 
