@@ -7,12 +7,13 @@ exports.addBankAccount = async (req, res) => {
             bank_name, 
             account_number, 
             ifsc_code, 
-            head_account, 
+            headAccountId,  // new
             upi_id,
-            user_id  // Added user_id
+            address,        // new
+            user_id
         } = req.body;
 
-        // Include user_id in validation
+        // Validation
         if (!bank_name || !account_number || !ifsc_code || !user_id) {
             return res.status(400).json({ 
                 error: "Bank name, Account number, IFSC code, and User ID are required.",
@@ -26,15 +27,16 @@ exports.addBankAccount = async (req, res) => {
         }
 
         const sql = `INSERT INTO bank_accounts 
-                     (bank_name, account_number, ifsc_code, head_account, upi_id, user_id)
-                     VALUES (?, ?, ?, ?, ?, ?)`;
+                     (bank_name, account_number, ifsc_code, head_account_id, upi_id, address, user_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
         const [result] = await db.execute(sql, [
             bank_name, 
             account_number, 
             ifsc_code, 
-            head_account, 
+            headAccountId, 
             upi_id,
+            address,
             user_id
         ]);
 
@@ -52,6 +54,7 @@ exports.addBankAccount = async (req, res) => {
         });
     }
 };
+
 
 // ✅ Get All Bank Accounts (filtered by user_id)
 exports.getBankAccounts = async (req, res) => {

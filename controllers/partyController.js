@@ -10,13 +10,13 @@ exports.addpartyEntry = async (req, res) => {
         contact_number, 
         alt_contact_number, 
         reference_name, 
-        customer_field, 
+        customerFieldId,  // changed from customer_field
         grade,
-        user_id  // Added user_id
+        user_id
     } = req.body;
 
-    // Include user_id in required fields
-    if (!party || !gst_number || !address || !state || !contact_number || !customer_field || !grade || !user_id) {
+    // Validation with customerFieldId
+    if (!party || !gst_number || !address || !state || !contact_number || !customerFieldId || !grade || !user_id) {
         return res.status(400).json({ 
             message: "All required fields must be provided",
             missing_fields: {
@@ -25,7 +25,7 @@ exports.addpartyEntry = async (req, res) => {
                 address: !address,
                 state: !state,
                 contact_number: !contact_number,
-                customer_field: !customer_field,
+                customerFieldId: !customerFieldId,
                 grade: !grade,
                 user_id: !user_id
             }
@@ -41,7 +41,7 @@ exports.addpartyEntry = async (req, res) => {
         `;
         const [result] = await db.execute(query, [
             party, gst_number, address, state, contact_number, 
-            alt_contact_number, reference_name, customer_field, 
+            alt_contact_number, reference_name, customerFieldId, // updated here
             grade, user_id
         ]);
 
@@ -58,6 +58,7 @@ exports.addpartyEntry = async (req, res) => {
         });
     }
 };
+
 
 // Get all parties (with user filtering)
 exports.getAllpartys = async (req, res) => {
