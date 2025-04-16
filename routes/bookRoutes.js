@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const bookController = require("../controllers/bookController");
-const referencerController = require('../controllers/Referencer');
 const verifyToken = require('../middleware/auth'); // Ensure the path is correct
 
 
@@ -41,12 +40,6 @@ router.delete('/books/:book_id/members/:member_name',verifyToken, bookController
 
 // Delete a book
 router.delete('/books/:book_id', verifyToken, bookController.deleteBook);
-
-// Add a referencer to a book
-router.post('/books/:book_id/referencer', verifyToken, referencerController.addReferencer);
-
-// Get referencer for a book
-router.get('/books/:book_id/referencer', verifyToken, referencerController.getReferencer);
 
 router.get("/user/:user_id", verifyToken, bookController.getAllBooksByUserId);
 

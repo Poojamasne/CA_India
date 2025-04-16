@@ -1,4 +1,3 @@
-// controllers/Referencer.js
 const db = require('../db');
 
 // Add a new referencer to a book

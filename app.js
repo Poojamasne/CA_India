@@ -24,6 +24,7 @@ const InvoiceRoutes = require("./routes/InvoiceRoutes");
 const ProfileRoutes = require("./routes/ProfileRoutes");
 const FilterRoutes = require('./routes/FilterRoutes');
 const transferRoutes = require("./routes/TransferRoutes");
+const referencerRoutes = require('./routes/referencerRoutes');
 
 
 const app = express();
@@ -87,6 +88,7 @@ app.use('/api', InvoiceRoutes);
 app.use('/api', ProfileRoutes);
 app.use('/api', FilterRoutes);
 app.use("/api", transferRoutes);
+app.use('/api', referencerRoutes); 
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
