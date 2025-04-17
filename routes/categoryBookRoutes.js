@@ -5,7 +5,7 @@ const verifyToken = require('../middleware/auth'); // Ensure the path is correct
 
 
 // Route to get categories linked to a book
-router.get("/books/:book_id/categories", verifyToken, categoryBookController.getCategoriesByBook);
+router.get("/:book_id/categories", verifyToken, categoryBookController.getCategoriesByBook);
 
 
 // 2️⃣ Add a new category group

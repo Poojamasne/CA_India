@@ -132,60 +132,6 @@ exports.addCategoryGroup = async (req, res) => {
     }
 };
 
-
-// ✅ 3️⃣ Get all categories of groups linked to a specific book
-exports.getCategoriesByGroup = async (req, res) => {
-    const { book_id } = req.params;
-
-    try {
-        const [result] = await db.query(`
-            SELECT 
-                bcgl.book_id,
-                cg.id AS category_group_id,
-                cg.group_name AS category_group_name,
-                c.id AS category_id,
-                c.category_name
-            FROM book_category_group_link bcgl
-            JOIN category_groups cg ON bcgl.category_group_id = cg.id
-            LEFT JOIN categories c ON c.category_group_id = cg.id
-            WHERE bcgl.book_id = ?
-            ORDER BY cg.id, c.id;
-        `, [book_id]);
-
-        if (result.length === 0) {
-            return res.status(404).json({ success: false, message: "No categories found for this book" });
-        }
-
-        // Optional: group categories under their category group
-        const grouped = {};
-        result.forEach(row => {
-            if (!grouped[row.category_group_id]) {
-                grouped[row.category_group_id] = {
-                    category_group_id: row.category_group_id,
-                    category_group_name: row.category_group_name,
-                    categories: []
-                };
-            }
-            if (row.category_id) {
-                grouped[row.category_group_id].categories.push({
-                    category_id: row.category_id,
-                    category_name: row.category_name
-                });
-            }
-        });
-
-        res.status(200).json({
-            success: true,
-            book_id: book_id,
-            category_groups: Object.values(grouped)
-        });
-
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Failed to fetch categories", error: err.message });
-    }
-};
-
-
 // Get categories linked to a specific book
 exports.getCategoriesByBook = async (req, res) => {
     const { book_id } = req.params;

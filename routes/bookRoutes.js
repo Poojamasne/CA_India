@@ -51,5 +51,5 @@ router.post("/books/:book_id/add-grade", verifyToken, bookController.addGradeToB
 
 router.post('/books/head-account/link', verifyToken, bookController.linkHeadAccountToBook);
 
-
 module.exports = router;
+
