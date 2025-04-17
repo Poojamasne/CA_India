@@ -7,7 +7,7 @@ const verifyToken = require('../middleware/auth');
 router.post('/head-account', verifyToken, headAccountController.addHeadAccount);
 router.get('/head-account', verifyToken, headAccountController.getHeadAccounts);
 
-router.get('/books/:bookId/details', verifyToken, headAccountController.getBookWithHeadAccount);
+router.get('/:bookId/details', verifyToken, headAccountController.getBookWithHeadAccount);
 
 
 module.exports = router;

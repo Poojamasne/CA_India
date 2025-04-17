@@ -66,8 +66,8 @@ exports.getHeadAccounts = async (req, res) => {
 
 // ✅ Get Book with Head Account Details (with user verification)
 exports.getBookWithHeadAccount = async (req, res) => {
-    const bookId = parseInt(req.params.bookId);
-    const { user_id } = req.query;
+    const bookId = parseInt(req.params.bookId);  // Extract bookId from URL parameter
+    const { user_id } = req.query;  // Extract user_id from query parameter
 
     if (!user_id) {
         return res.status(400).json({ 
