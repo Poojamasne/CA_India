@@ -171,11 +171,12 @@ exports.addCategoryGroup = async (req, res) => {
 //         res.status(500).json({ success: false, message: "Failed to fetch categories for this book", error: err.message });
 //     }
 // };
+
 exports.getCategoriesByBook = async (req, res) => {
     const { book_id } = req.params;
 
     try {
-        // Query to get the book details
+        // Get the book details
         const [bookResult] = await db.query(`
             SELECT 
                 book_id,
@@ -200,22 +201,22 @@ exports.getCategoriesByBook = async (req, res) => {
             return res.status(404).json({ success: false, message: "Book not found" });
         }
 
-        const book = bookResult[0]; // Extract the book details
+        const book = bookResult[0];
 
-        // Query to get categories with only category_id and category_name
+        // ✅ Fetch categories using the linking table
         const [categoryResult] = await db.query(`
             SELECT 
                 c.id AS category_id,
                 c.category_name
             FROM categories c
-            WHERE c.book_id = ?
+            INNER JOIN book_category_link bcl ON c.id = bcl.category_id
+            WHERE bcl.book_id = ?
         `, [book_id]);
 
-        // Respond with book details and categories
         res.status(200).json({
             success: true,
-            book: book, // The book details
-            categories: categoryResult // Only category_id and category_name
+            book: book,
+            categories: categoryResult
         });
     } catch (err) {
         res.status(500).json({

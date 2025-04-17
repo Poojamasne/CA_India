@@ -249,6 +249,97 @@ exports.deleteBook = async (req, res) => {
 
 // // ✅ Get single book with user verification
 
+// exports.getBookById = async (req, res) => {
+//     const { book_id, user_id } = req.params;
+
+//     if (!book_id || isNaN(book_id) || !user_id || isNaN(user_id)) {
+//         return res.status(400).json({
+//             success: false,
+//             message: "Valid Book ID and User ID are required",
+//             code: "IDS_REQUIRED"
+//         });
+//     }
+
+//     try {
+//         const [book] = await db.query(
+//             `SELECT 
+//                 b.book_id, 
+//                 b.book_name, 
+//                 b.inventory_status, 
+//                 b.business_id, 
+//                 b.created_at,
+//                 b.user_id,
+//                 (
+//                     SELECT COUNT(*) 
+//                     FROM book_members 
+//                     WHERE book_members.book_id = b.book_id
+//                 ) AS member_count,
+//                 (
+//                     SELECT JSON_ARRAYAGG(
+//                         JSON_OBJECT(
+//                             'id', re.id,
+//                             'receipt_no', re.receipt_no,
+//                             'amount', re.amount,
+//                             'receipt_type', re.receipt_type,
+//                             'created_at', DATE_FORMAT(re.created_at, '%Y-%m-%d %H:%i:%s')
+//                         )
+//                     )
+//                     FROM (
+//                         SELECT * 
+//                         FROM receipt_entries 
+//                         WHERE book_id = b.book_id 
+//                         ORDER BY created_at DESC 
+//                         LIMIT 3
+//                     ) AS re
+//                 ) AS recent_receipts
+//              FROM books b
+//              WHERE b.book_id = ?
+//                AND (
+//                    b.user_id = ?
+//                    OR EXISTS (
+//                        SELECT 1 FROM book_members 
+//                        WHERE book_members.book_id = b.book_id AND book_members.user_id = ?
+//                    )
+//                )
+//              LIMIT 1`,
+//             [book_id, user_id, user_id]
+//         );
+
+//         if (book.length === 0) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "Book not found or not owned by user",
+//                 code: "BOOK_NOT_FOUND"
+//             });
+//         }
+
+//         res.status(200).json({
+//             success: true,
+//             book: {
+//                 ...book[0],
+//                 inventory_status: Boolean(book[0].inventory_status),
+//                 created_at: new Date(book[0].created_at).toLocaleString(),
+//                 member_count: book[0].member_count || 0,
+//                 recent_receipts: Array.isArray(book[0].recent_receipts)
+//                 ? book[0].recent_receipts
+//                 : JSON.parse(book[0].recent_receipts || "[]")
+
+//             },
+//             user_id: parseInt(user_id),
+//             timestamp: new Date().toISOString()
+//         });
+
+//     } catch (err) {
+//         console.error("Database error:", err);
+//         res.status(500).json({
+//             success: false,
+//             message: "Failed to fetch book",
+//             error: err.message,
+//             code: "BOOK_FETCH_FAILED"
+//         });
+//     }
+// };
+
 exports.getBookById = async (req, res) => {
     const { book_id, user_id } = req.params;
 
@@ -281,7 +372,10 @@ exports.getBookById = async (req, res) => {
                             'receipt_no', re.receipt_no,
                             'amount', re.amount,
                             'receipt_type', re.receipt_type,
-                            'created_at', DATE_FORMAT(re.created_at, '%Y-%m-%d %H:%i:%s')
+                            'created_at', DATE_FORMAT(re.created_at, '%Y-%m-%d %H:%i:%s'),
+                            'partyName', re.party,
+                            'categorySplit', CAST(re.category_split AS JSON),  -- Parsing category_split as JSON
+                            'balance', re.amount
                         )
                     )
                     FROM (
@@ -295,7 +389,7 @@ exports.getBookById = async (req, res) => {
              FROM books b
              WHERE b.book_id = ?
                AND (
-                   b.user_id = ?
+                   b.user_id = ? 
                    OR EXISTS (
                        SELECT 1 FROM book_members 
                        WHERE book_members.book_id = b.book_id AND book_members.user_id = ?
@@ -323,7 +417,6 @@ exports.getBookById = async (req, res) => {
                 recent_receipts: Array.isArray(book[0].recent_receipts)
                 ? book[0].recent_receipts
                 : JSON.parse(book[0].recent_receipts || "[]")
-
             },
             user_id: parseInt(user_id),
             timestamp: new Date().toISOString()
@@ -339,7 +432,6 @@ exports.getBookById = async (req, res) => {
         });
     }
 };
-
 
 
 

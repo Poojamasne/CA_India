@@ -104,8 +104,6 @@ exports.addInvoice = async (req, res) => {
     }
 };
 
-
-
 // ✅ Get all invoices (filtered by user_id and optionally by type)
 exports.getInvoices = async (req, res) => {
     try {

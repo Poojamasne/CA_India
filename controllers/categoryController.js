@@ -69,11 +69,41 @@ const addCategoryGroup = async (req, res) => {
 };
 
 // ✅ Create a new category
-const createCategory = async (req, res) => {
-    const { category_name, amount, category_group, user_id } = req.body;
+// const createCategory = async (req, res) => {
+//     const { category_name, amount, category_group, user_id } = req.body;
 
-    if (!category_name || amount === undefined || !category_group || !user_id) {
-        return res.status(400).json({ message: "Category name, amount, category group, and user ID are required" });
+//     if (!category_name || amount === undefined || !category_group || !user_id) {
+//         return res.status(400).json({ message: "Category name, amount, category group, and user ID are required" });
+//     }
+
+//     // Validate group
+//     const [dynamicGroups] = await db.query("SELECT group_name FROM category_groups");
+//     const allGroups = [...CATEGORY_GROUPS, ...dynamicGroups.map(g => g.group_name)];
+
+//     if (!allGroups.includes(category_group)) {
+//         return res.status(400).json({ message: "Invalid category group" });
+//     }
+
+//     try {
+//         const [result] = await db.query(
+//             "INSERT INTO categories (category_name, amount, category_group, user_id) VALUES (?, ?, ?, ?)",
+//             [category_name, amount, category_group, user_id]
+//         );
+//         res.status(201).json({
+//             success: true,
+//             message: "Category added successfully",
+//             category: { id: result.insertId, category_name, amount, category_group, user_id }
+//         });
+//     } catch (err) {
+//         res.status(500).json({ error: err.message });
+//     }
+// };
+// ✅ Create a new category (with book_id)
+const createCategory = async (req, res) => {
+    const { category_name, amount, category_group, user_id, book_id } = req.body;
+
+    if (!category_name || amount === undefined || !category_group || !user_id || !book_id) {
+        return res.status(400).json({ message: "Category name, amount, category group, user ID, and book ID are required" });
     }
 
     // Validate group
@@ -86,13 +116,20 @@ const createCategory = async (req, res) => {
 
     try {
         const [result] = await db.query(
-            "INSERT INTO categories (category_name, amount, category_group, user_id) VALUES (?, ?, ?, ?)",
-            [category_name, amount, category_group, user_id]
+            "INSERT INTO categories (category_name, amount, category_group, user_id, book_id) VALUES (?, ?, ?, ?, ?)",
+            [category_name, amount, category_group, user_id, book_id]
         );
         res.status(201).json({
             success: true,
             message: "Category added successfully",
-            category: { id: result.insertId, category_name, amount, category_group, user_id }
+            category: {
+                id: result.insertId,
+                category_name,
+                amount,
+                category_group,
+                user_id,
+                book_id
+            }
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
