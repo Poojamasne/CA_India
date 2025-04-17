@@ -133,45 +133,98 @@ exports.addCategoryGroup = async (req, res) => {
 };
 
 // Get categories linked to a specific book
+// exports.getCategoriesByBook = async (req, res) => {
+//     const { book_id } = req.params;
+
+//     try {
+//         const [result] = await db.query(`
+//             SELECT 
+//                 b.book_id, 
+//                 b.book_name, 
+//                 b.inventory_status, 
+//                 b.business_id, 
+//                 b.net_balance, 
+//                 b.receipt, 
+//                 b.payment, 
+//                 b.recent_entries_date, 
+//                 b.party_id, 
+//                 b.income_tax_challan, 
+//                 b.entry_by, 
+//                 b.entry_time, 
+//                 b.balance, 
+//                 b.created_at, 
+//                 c.id AS category_id,
+//                 c.category_name, 
+//                 c.amount, 
+//                 c.category_group
+//             FROM books b
+//             LEFT JOIN categories c ON b.category_id = c.id
+//             WHERE b.book_id = ?;
+//         `, [book_id]);
+
+//         if (result.length === 0) {
+//             return res.status(404).json({ success: false, message: "Book not found or no category linked" });
+//         }
+
+//         res.status(200).json({ success: true, book: result[0], categories: result });
+//     } catch (err) {
+//         res.status(500).json({ success: false, message: "Failed to fetch categories for this book", error: err.message });
+//     }
+// };
 exports.getCategoriesByBook = async (req, res) => {
     const { book_id } = req.params;
 
     try {
-        const [result] = await db.query(`
+        // Query to get the book details
+        const [bookResult] = await db.query(`
             SELECT 
-                b.book_id, 
-                b.book_name, 
-                b.inventory_status, 
-                b.business_id, 
-                b.net_balance, 
-                b.receipt, 
-                b.payment, 
-                b.recent_entries_date, 
-                b.party_id, 
-                b.income_tax_challan, 
-                b.entry_by, 
-                b.entry_time, 
-                b.balance, 
-                b.created_at, 
-                c.id AS category_id,
-                c.category_name, 
-                c.amount, 
-                c.category_group
-            FROM books b
-            LEFT JOIN categories c ON b.category_id = c.id
-            WHERE b.book_id = ?;
+                book_id,
+                book_name,
+                inventory_status,
+                business_id,
+                net_balance,
+                receipt,
+                payment,
+                recent_entries_date,
+                party_id,
+                income_tax_challan,
+                entry_by,
+                entry_time,
+                balance,
+                created_at
+            FROM books 
+            WHERE book_id = ?
         `, [book_id]);
 
-        if (result.length === 0) {
-            return res.status(404).json({ success: false, message: "Book not found or no category linked" });
+        if (bookResult.length === 0) {
+            return res.status(404).json({ success: false, message: "Book not found" });
         }
 
-        res.status(200).json({ success: true, book: result[0], categories: result });
+        const book = bookResult[0]; // Extract the book details
+
+        // Query to get categories with only category_id and category_name
+        const [categoryResult] = await db.query(`
+            SELECT 
+                c.id AS category_id,
+                c.category_name
+            FROM categories c
+            WHERE c.book_id = ?
+        `, [book_id]);
+
+        // Respond with book details and categories
+        res.status(200).json({
+            success: true,
+            book: book, // The book details
+            categories: categoryResult // Only category_id and category_name
+        });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Failed to fetch categories for this book", error: err.message });
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch categories for this book",
+            error: err.message
+        });
     }
 };
-
 
 // Link categories to a book
 exports.linkCategoryToBook = async (req, res) => {
