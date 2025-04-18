@@ -1,6 +1,7 @@
 const db = require('../db');
 
 // Add new party
+// Add new party with book_id
 exports.addpartyEntry = async (req, res) => {
     const { 
         party, 
@@ -10,13 +11,14 @@ exports.addpartyEntry = async (req, res) => {
         contact_number, 
         alt_contact_number, 
         reference_name, 
-        customerFieldId,  // changed from customer_field
+        customerFieldId,  // corresponds to customer_field in DB
         grade,
-        user_id
+        user_id,
+        book_id           // NEW: Add book_id
     } = req.body;
 
-    // Validation with customerFieldId
-    if (!party || !gst_number || !address || !state || !contact_number || !customerFieldId || !grade || !user_id) {
+    // Validation with book_id included
+    if (!party || !gst_number || !address || !state || !contact_number || !customerFieldId || !grade || !user_id || !book_id) {
         return res.status(400).json({ 
             message: "All required fields must be provided",
             missing_fields: {
@@ -27,7 +29,8 @@ exports.addpartyEntry = async (req, res) => {
                 contact_number: !contact_number,
                 customerFieldId: !customerFieldId,
                 grade: !grade,
-                user_id: !user_id
+                user_id: !user_id,
+                book_id: !book_id
             }
         });
     }
@@ -36,20 +39,22 @@ exports.addpartyEntry = async (req, res) => {
         const query = `
             INSERT INTO parties 
             (party, gst_number, address, state, contact_number, alt_contact_number, 
-             reference_name, customer_field, grade, user_id) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             reference_name, customer_field, grade, user_id, book_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
+
         const [result] = await db.execute(query, [
             party, gst_number, address, state, contact_number, 
-            alt_contact_number, reference_name, customerFieldId, // updated here
-            grade, user_id
+            alt_contact_number, reference_name, customerFieldId,
+            grade, user_id, book_id
         ]);
 
         res.status(201).json({ 
             success: true,
             message: "Party added successfully",
             party_id: result.insertId,
-            user_id: user_id
+            user_id: user_id,
+            book_id: book_id
         });
     } catch (error) {
         res.status(500).json({ 
@@ -58,6 +63,7 @@ exports.addpartyEntry = async (req, res) => {
         });
     }
 };
+
 
 
 // Get all parties (with user filtering)
