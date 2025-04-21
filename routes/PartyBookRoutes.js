@@ -10,4 +10,7 @@ router.post('/link', verifyToken, PartyBookController.linkPartyToBook);
 // GET API to fetch parties associated with a specific book
 router.get('/parties/:bookId', verifyToken, PartyBookController.getPartyByBook);
 
+
+router.delete('/book/:bookId/party/:partyId', PartyBookController.unlinkPartyFromBook);
+
 module.exports = router;

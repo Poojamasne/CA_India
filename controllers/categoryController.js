@@ -38,13 +38,24 @@ const getAllCategories = async (req, res) => {
 
 // ✅ Get all predefined and dynamic category groups
 const getCategoryGroups = async (req, res) => {
-    try {
-        const [dynamicGroups] = await db.query("SELECT group_name FROM category_groups");
-        const allGroups = [...CATEGORY_GROUPS, ...dynamicGroups.map(g => g.group_name)];
-        res.json({ category_groups: allGroups });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+        try {
+            // Query to get both id and group_name from the database
+            const [groups] = await db.query(
+                `SELECT id, group_name AS name FROM category_groups`
+            );
+    
+            // The response will automatically contain id and name
+            res.status(200).json({
+                success: true,
+                category_groups: groups
+            });
+    
+        } catch (err) {
+            res.status(500).json({ 
+                message: "Database error", 
+                error: err.message 
+            });
+        }
 };
 
 // ✅ Add a new category group dynamically

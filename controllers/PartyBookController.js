@@ -49,3 +49,33 @@ exports.getPartyByBook = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+
+// Unlink a party from a book
+exports.unlinkPartyFromBook = async (req, res) => {
+    try {
+        const { bookId, partyId } = req.params;
+
+        if (!bookId || !partyId) {
+            return res.status(400).json({ error: "bookId and partyId are required" });
+        }
+
+        const [result] = await db.execute(
+            `DELETE FROM book_party_link WHERE book_id = ? AND party_id = ?`,
+            [bookId, partyId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: "Link not found or already deleted" });
+        }
+
+        res.json({
+            success: true,
+            message: `Party ${partyId} unlinked from book ${bookId}`
+        });
+
+    } catch (error) {
+        console.error("Error unlinking party:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
