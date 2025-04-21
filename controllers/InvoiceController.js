@@ -1,77 +1,181 @@
+const express = require('express');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
-const db = require("../db");
+const db = require("../db"); // Ensure this module exports a function to get a database connection
 
 const pdfsDir = path.join(__dirname, '..', 'pdfs');
 if (!fs.existsSync(pdfsDir)) {
     fs.mkdirSync(pdfsDir);
 }
 
-// Function to generate PDF invoice and save it to a file
+// Function to generate PDF invoice in the format of the provided template
+// const generateInvoicePDF = (invoiceData, filePath) => {
+//     return new Promise((resolve, reject) => {
+//         const doc = new PDFDocument({ size: 'A4', margin: 50 });
+//         const writeStream = fs.createWriteStream(filePath);
+
+//         doc.pipe(writeStream);
+
+//         // Set font styles
+//         const boldFont = 'Helvetica-Bold';
+//         const regularFont = 'Helvetica';
+
+//         // Header Section
+//         doc.font(boldFont).fontSize(16).text('AMRUTKAR AND ASSOCIATES', 50, 50);
+//         doc.font(regularFont).fontSize(10).text('201, 2ND FLOOR, JALGAON-425001', 50, 70);
+        
+//         // Logo placeholder
+//         // Ensure the path to the logo is correct
+//         const logoPath = path.join(__dirname, '..', 'uploads', 'logo.jpeg');
+
+//         doc.image(logoPath, { width: 100, height: 50, x: 500, y: 30 });
+
+//         // Bill To Section
+//         doc.moveDown(2);
+//         doc.font(boldFont).fontSize(12).text('BILL TO', 50, 120);
+//         doc.font(regularFont).fontSize(10).text(invoiceData.customer_or_supplier, 50, 140);
+//         doc.font(regularFont).fontSize(10).text('JALGAON', 50, 155);
+//         doc.font(regularFont).fontSize(10).text(`MOBILE NO : ${invoiceData.mobile_number || 'N/A'}`, 50, 170);
+
+//         // Invoice Details
+//         doc.font(regularFont).fontSize(10).text(`INVOICE NO-${invoiceData.invoiceId}`, { align: 'right', x: 500, y: 120 });
+//         doc.font(regularFont).fontSize(10).text(`DATE-${invoiceData.invoice_date}`, { align: 'right', x: 500, y: 135 });
+
+//         // Items Table Header
+//         doc.moveDown(4);
+//         doc.font(boldFont).fontSize(12).text('PARTICULARS', 50, 220);
+//         doc.font(boldFont).fontSize(12).text('AMOUNT (RS)', { align: 'right', x: 500, y: 220 });
+        
+//         // Draw a line under the header
+//         doc.moveTo(50, 240).lineTo(550, 240).stroke();
+
+//         // Items List
+//         let y = 250;
+//         invoiceData.items.forEach((item) => {
+//             doc.font(regularFont).fontSize(10).text(`Item ${item.item_name} (${item.remark || ''})`, 50, y);
+//             doc.font(regularFont).fontSize(10).text(item.taxable_amount.toFixed(2), { align: 'right', x: 500, y });
+//             y += 20;
+//         });
+
+//         // Totals Section
+//         y += 10;
+//         doc.font(regularFont).fontSize(10).text('Round off', 50, y);
+//         doc.font(regularFont).fontSize(10).text(invoiceData.totals.round_off.toFixed(2), { align: 'right', x: 500, y });
+//         y += 20;
+
+//         doc.font(boldFont).fontSize(10).text('Total', 50, y);
+//         doc.font(boldFont).fontSize(10).text(invoiceData.totals.taxable.toFixed(2), { align: 'right', x: 500, y });
+//         y += 20;
+
+//         doc.font(regularFont).fontSize(10).text('Discount', 50, y);
+//         doc.font(regularFont).fontSize(10).text(invoiceData.totals.discount.toFixed(2), { align: 'right', x: 500, y });
+//         y += 20;
+
+//         doc.font(boldFont).fontSize(12).text('Final Amount', 50, y);
+//         doc.font(boldFont).fontSize(12).text(invoiceData.totals.grand_total.toFixed(2), { align: 'right', x: 500, y });
+//         y += 30;
+
+//         // Footer Section
+//         doc.font(regularFont).fontSize(10).text(invoiceData.bank_name || 'SBI', 50, y);
+//         doc.font(regularFont).fontSize(10).text('For AMRUTKAR AND ASSOCIATES', 50, y + 20);
+//         doc.font(regularFont).fontSize(10).text('(Attach Sign Here)', 50, y + 40);
+//         doc.font(regularFont).fontSize(10).text('Authorized Signatory', 50, y + 60);
+
+//         // End the PDF document
+//         doc.end();
+
+//         writeStream.on('finish', () => {
+//             resolve(filePath);
+//         });
+
+//         writeStream.on('error', (err) => {
+//             reject(err);
+//         });
+//     });
+// };
 const generateInvoicePDF = (invoiceData, filePath) => {
     return new Promise((resolve, reject) => {
-        const doc = new PDFDocument();
+        const doc = new PDFDocument({ size: 'A4', margin: 50 });
         const writeStream = fs.createWriteStream(filePath);
-
         doc.pipe(writeStream);
 
-        // Invoice Header
-        doc.fontSize(18).text('TAX INVOICE ORIGINAL FOR RECIPIENT', 50, 50);
-        doc.fontSize(12).text(`Invoice No: ${invoiceData.invoiceId}`, 50, 80);
-        doc.fontSize(12).text(`Invoice Date: ${invoiceData.invoice_date}`, 50, 100);
+        const bold = 'Helvetica-Bold';
+        const regular = 'Helvetica';
 
-        // Customer Details
-        doc.fontSize(14).text('BILL TO', 50, 140);
-        doc.fontSize(12).text(invoiceData.customer_or_supplier, 50, 170);
+        // Load images
+        const logoPath = path.join(__dirname, '..', 'uploads', 'logo.jpeg');
+        const avatarPath = path.join(__dirname, '..', 'uploads', 'avatar.jpeg'); // placeholder for round image
 
-        // Items Table
-        doc.fontSize(14).text('Items', 50, 230);
-        doc.rect(50, 250, 500, 30).stroke();
-        doc.fontSize(12).text('SN', 50, 260);
-        doc.fontSize(12).text('Items', 100, 260);
-        doc.fontSize(12).text('HSN', 200, 260);
-        doc.fontSize(12).text('Quantity', 250, 260);
-        doc.fontSize(12).text('Price per unit', 350, 260);
-        doc.fontSize(12).text('Tax per unit', 450, 260);
-        doc.fontSize(12).text('Amount', 550, 260);
+        // Header
+        doc.font(bold).fontSize(14).text('AMRUTKAR AND ASSOCIATES', 50, 40);
+        doc.font(regular).fontSize(10).text('201, 2ND FLOOR, JALGAON–425001', 50, 60);
 
-        let y = 280;
+        // Logo
+        if (fs.existsSync(logoPath)) {
+            doc.image(logoPath, 480, 35, { width: 70, height: 35 });
+        }
+
+        // BILL TO
+        doc.font(bold).fontSize(10).text('BILL TO', 50, 100);
+        doc.font(regular).text(invoiceData.customer_or_supplier, 50, 115);
+        doc.text('JALGAON', 50, 130);
+        doc.text(`MOBILE NO : ${invoiceData.mobile_number || 'N/A'}`, 50, 145);
+
+        // Avatar / User icon
+        if (fs.existsSync(avatarPath)) {
+            doc.circle(500 + 15, 105 + 15, 15).clip().image(avatarPath, 500, 105, { width: 30, height: 30 }).restore();
+        }
+
+        // Invoice Info
+        doc.font(regular).text(`INVOICE NO–${invoiceData.invoiceId}`, 450, 105);
+        doc.text(`DATE–${invoiceData.invoice_date}`, 450, 120);
+        doc.fillColor('red').fontSize(8).text('DUE DATE [NOT TO BE PRINTED ON INVOICE]', 450, 135).fillColor('black');
+
+        // Table Header
+        doc.moveTo(50, 170).lineTo(550, 170).stroke();
+        doc.font(bold).fontSize(10).text('PARTICULARS', 50, 175);
+        doc.text('AMOUNT (RS)', 450, 175);
+        doc.moveTo(50, 195).lineTo(550, 195).stroke();
+
+        // Items
+        let y = 200;
         invoiceData.items.forEach((item, index) => {
-            doc.rect(50, y, 500, 30).stroke();
-            doc.fontSize(12).text(`${index + 1}`, 50, y + 10);
-            doc.fontSize(12).text(item.item_name, 100, y + 10);
-            doc.fontSize(12).text(item.hsn_code, 200, y + 10);
-            doc.fontSize(12).text(item.quantity_unit, 250, y + 10);
-            doc.fontSize(12).text(item.rate_per_unit.toFixed(2), 350, y + 10);
-            doc.fontSize(12).text(item.tax_rate.toFixed(2), 450, y + 10);
-            doc.fontSize(12).text(item.taxable_amount.toFixed(2), 550, y + 10);
-            y += 30;
+            doc.font(regular).fontSize(10).text(`Item ${item.item_name} (${item.remark || ''})`, 50, y);
+            doc.text(item.taxable_amount.toFixed(2), 450, y);
+            y += 20;
         });
 
-        // Totals
-        doc.fontSize(14).text('Totals', 50, y + 20);
-        doc.fontSize(12).text(`Taxable Amount: ${invoiceData.totals.taxable.toFixed(2)}`, 50, y + 50);
-        doc.fontSize(12).text(`CGST @ 9.0%: ${invoiceData.totals.cgst.toFixed(2)}`, 50, y + 70);
-        doc.fontSize(12).text(`SGST @ 9.0%: ${invoiceData.totals.sgst.toFixed(2)}`, 50, y + 90);
-        doc.fontSize(12).text(`CGST @ 14.0%: ${invoiceData.totals.igst.toFixed(2)}`, 50, y + 110);
-        doc.fontSize(12).text(`SGST @ 14.0%: ${invoiceData.totals.igst.toFixed(2)}`, 50, y + 130);
-        doc.fontSize(12).text(`Total Amount: ${invoiceData.totals.grand_total.toFixed(2)}`, 50, y + 150);
+        // Total Section
+        doc.moveTo(50, y).lineTo(550, y).stroke();
+        y += 10;
+        doc.text('Round off', 50, y);
+        doc.text(invoiceData.totals.round_off.toFixed(2), 450, y);
+        y += 20;
+        doc.font(bold).text('Total', 50, y);
+        doc.text(invoiceData.totals.taxable.toFixed(2), 450, y);
+        y += 20;
+        doc.font(regular).text('Discount', 50, y);
+        doc.text(invoiceData.totals.discount.toFixed(2), 450, y);
+        y += 20;
+        doc.font(bold).fontSize(11).text('Final Amount', 50, y);
+        doc.fillColor('green').fontSize(12).text(invoiceData.totals.grand_total.toFixed(2), 450, y);
+        doc.fillColor('black');
+        y += 30;
 
-        // End the PDF document
+        // Footer
+        doc.font(regular).fontSize(10).text(invoiceData.bank_name || 'SBI', 50, y);
+        doc.text('For AMRUTKAR AND ASSOCIATES', 350, y);
+        doc.text('(Attach Sign Here)', 350, y + 20);
+        doc.text('Authorized Signatory.', 350, y + 40);
+
+        // Finalize
         doc.end();
-
-        writeStream.on('finish', () => {
-            resolve(filePath);
-        });
-
-        writeStream.on('error', (err) => {
-            reject(err);
-        });
+        writeStream.on('finish', () => resolve(filePath));
+        writeStream.on('error', (err) => reject(err));
     });
 };
 
-// ✅ Add a new invoice (with user_id)
 exports.addInvoice = async (req, res) => {
     try {
         const { 
@@ -103,27 +207,34 @@ exports.addInvoice = async (req, res) => {
             });
         }
 
-        // Calculate total values
+        // Fetch user details from the users table
+        const [userResult] = await db.query('SELECT name, phone_number, email FROM users WHERE id = ?', [user_id]);
+        if (userResult.length === 0) {
+            return res.status(400).json({ error: "User not found" });
+        }
+        const { name, phone_number, email } = userResult[0];
+
+        // Calculate total values (with 0 tax values)
         let total_taxable = items.reduce((sum, item) => sum + parseFloat(item.taxable_amount || 0), 0);
-        let total_cgst = (total_taxable * 9) / 100;
-        let total_sgst = (total_taxable * 9) / 100;
-        let total_igst = (total_taxable * 18) / 100;
-        let total_amount = total_taxable + total_cgst + total_sgst - discount_amount + round_off;
+        let total_amount = total_taxable - discount_amount + round_off;
+
+        // Extract hsn_code from the first item (or handle it as needed)
+        const hsn_code = items[0]?.hsn_code || 'default_value';
 
         const connection = await db.getConnection();
         try {
             await connection.beginTransaction();
 
-            // Insert invoice
+            // Insert invoice with 0 values for tax fields
             const [invoiceResult] = await connection.query(
                 `INSERT INTO invoices 
                     (type, customer_or_supplier, invoice_date, total_taxable, 
                      cgst, sgst, igst, total_amount, discount_amount, 
-                     percentage, round_off, user_id, book_id, bank_account_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     percentage, round_off, user_id, book_id, bank_account_id, hsn_code)
+                 VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [type, customer_or_supplier, invoice_date, total_taxable, 
-                 total_cgst, total_sgst, total_igst, total_amount, 
-                 discount_amount, percentage, round_off, user_id, book_id, bank_account_id]
+                 total_amount, discount_amount, percentage, round_off, 
+                 user_id, book_id, bank_account_id, hsn_code]
             );
 
             const invoiceId = invoiceResult.insertId;
@@ -132,11 +243,9 @@ exports.addInvoice = async (req, res) => {
             for (const item of items) {
                 await connection.query(
                     `INSERT INTO invoice_items 
-                        (invoice_id, item_name, hsn_code, quantity_unit, 
-                         rate_per_unit, tax_rate, taxable_amount, user_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [invoiceId, item.item_name, item.hsn_code, item.quantity_unit, 
-                     item.rate_per_unit, item.tax_rate, item.taxable_amount, user_id]
+                        (invoice_id, item_name, taxable_amount, remark, user_id, hsn_code, quantity_unit, rate_per_unit, tax_rate)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [invoiceId, item.item_name, item.taxable_amount, item.remark || '', user_id, item.hsn_code, item.quantity_unit || 'default_unit', item.rate_per_unit || 0.00, item.tax_rate || 0.00]
                 );
             }
 
@@ -148,12 +257,11 @@ exports.addInvoice = async (req, res) => {
                 type,
                 customer_or_supplier,
                 invoice_date,
+                mobile_number: phone_number,
+                bank_name: 'SBI', // Assuming bank_name is not fetched from the user table
                 items,
                 totals: {
                     taxable: total_taxable,
-                    cgst: total_cgst,
-                    sgst: total_sgst,
-                    igst: total_igst,
                     discount: discount_amount,
                     round_off: round_off,
                     grand_total: total_amount
