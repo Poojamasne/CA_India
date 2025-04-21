@@ -5,6 +5,7 @@ const cors = require('cors');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const path = require('path'); 
+const fs = require('fs'); // Import the fs module
 
 const userAuthRoutes = require('./routes/user-auth-routes');
 const bookRoutes = require('./routes/bookRoutes');
@@ -26,7 +27,6 @@ const FilterRoutes = require('./routes/FilterRoutes');
 const transferRoutes = require("./routes/TransferRoutes");
 const referencerRoutes = require('./routes/referencerRoutes');
 
-
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
@@ -40,8 +40,14 @@ app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use(cors());
 
+// Ensure the 'pdfs' directory exists
+const pdfsDir = path.join(__dirname, 'pdfs');
+if (!fs.existsSync(pdfsDir)) {
+    fs.mkdirSync(pdfsDir);
+}
+
+app.use('/download', express.static(pdfsDir));
 
 const connectedClients = new Set();
 

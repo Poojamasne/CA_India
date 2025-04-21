@@ -22,4 +22,7 @@ router.get("/purchase-return-invoice", verifyToken, InvoiceController.getInvoice
 // ✅ Get Invoice by ID (with items)
 router.get("/invoice/:id", verifyToken, InvoiceController.getInvoiceById);
 
+// ✅ Download Invoice PDF
+router.get("/download/invoice/:id", verifyToken, InvoiceController.downloadPDF);
+
 module.exports = router;

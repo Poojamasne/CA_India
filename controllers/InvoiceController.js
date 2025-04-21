@@ -1,4 +1,75 @@
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
 const db = require("../db");
+
+const pdfsDir = path.join(__dirname, '..', 'pdfs');
+if (!fs.existsSync(pdfsDir)) {
+    fs.mkdirSync(pdfsDir);
+}
+
+// Function to generate PDF invoice and save it to a file
+const generateInvoicePDF = (invoiceData, filePath) => {
+    return new Promise((resolve, reject) => {
+        const doc = new PDFDocument();
+        const writeStream = fs.createWriteStream(filePath);
+
+        doc.pipe(writeStream);
+
+        // Invoice Header
+        doc.fontSize(18).text('TAX INVOICE ORIGINAL FOR RECIPIENT', 50, 50);
+        doc.fontSize(12).text(`Invoice No: ${invoiceData.invoiceId}`, 50, 80);
+        doc.fontSize(12).text(`Invoice Date: ${invoiceData.invoice_date}`, 50, 100);
+
+        // Customer Details
+        doc.fontSize(14).text('BILL TO', 50, 140);
+        doc.fontSize(12).text(invoiceData.customer_or_supplier, 50, 170);
+
+        // Items Table
+        doc.fontSize(14).text('Items', 50, 230);
+        doc.rect(50, 250, 500, 30).stroke();
+        doc.fontSize(12).text('SN', 50, 260);
+        doc.fontSize(12).text('Items', 100, 260);
+        doc.fontSize(12).text('HSN', 200, 260);
+        doc.fontSize(12).text('Quantity', 250, 260);
+        doc.fontSize(12).text('Price per unit', 350, 260);
+        doc.fontSize(12).text('Tax per unit', 450, 260);
+        doc.fontSize(12).text('Amount', 550, 260);
+
+        let y = 280;
+        invoiceData.items.forEach((item, index) => {
+            doc.rect(50, y, 500, 30).stroke();
+            doc.fontSize(12).text(`${index + 1}`, 50, y + 10);
+            doc.fontSize(12).text(item.item_name, 100, y + 10);
+            doc.fontSize(12).text(item.hsn_code, 200, y + 10);
+            doc.fontSize(12).text(item.quantity_unit, 250, y + 10);
+            doc.fontSize(12).text(item.rate_per_unit.toFixed(2), 350, y + 10);
+            doc.fontSize(12).text(item.tax_rate.toFixed(2), 450, y + 10);
+            doc.fontSize(12).text(item.taxable_amount.toFixed(2), 550, y + 10);
+            y += 30;
+        });
+
+        // Totals
+        doc.fontSize(14).text('Totals', 50, y + 20);
+        doc.fontSize(12).text(`Taxable Amount: ${invoiceData.totals.taxable.toFixed(2)}`, 50, y + 50);
+        doc.fontSize(12).text(`CGST @ 9.0%: ${invoiceData.totals.cgst.toFixed(2)}`, 50, y + 70);
+        doc.fontSize(12).text(`SGST @ 9.0%: ${invoiceData.totals.sgst.toFixed(2)}`, 50, y + 90);
+        doc.fontSize(12).text(`CGST @ 14.0%: ${invoiceData.totals.igst.toFixed(2)}`, 50, y + 110);
+        doc.fontSize(12).text(`SGST @ 14.0%: ${invoiceData.totals.igst.toFixed(2)}`, 50, y + 130);
+        doc.fontSize(12).text(`Total Amount: ${invoiceData.totals.grand_total.toFixed(2)}`, 50, y + 150);
+
+        // End the PDF document
+        doc.end();
+
+        writeStream.on('finish', () => {
+            resolve(filePath);
+        });
+
+        writeStream.on('error', (err) => {
+            reject(err);
+        });
+    });
+};
 
 // ✅ Add a new invoice (with user_id)
 exports.addInvoice = async (req, res) => {
@@ -71,11 +142,13 @@ exports.addInvoice = async (req, res) => {
 
             await connection.commit();
 
-            res.status(201).json({ 
-                success: true,
-                message: "Invoice added successfully", 
+            // Generate and save PDF
+            const invoiceData = {
                 invoiceId,
-                user_id,
+                type,
+                customer_or_supplier,
+                invoice_date,
+                items,
                 totals: {
                     taxable: total_taxable,
                     cgst: total_cgst,
@@ -84,7 +157,19 @@ exports.addInvoice = async (req, res) => {
                     discount: discount_amount,
                     round_off: round_off,
                     grand_total: total_amount
-                }
+                },
+                user_id
+            };
+
+            const filePath = path.join(pdfsDir, `invoice_${invoiceId}.pdf`);
+            await generateInvoicePDF(invoiceData, filePath);
+
+            // Provide download link in the response
+            const downloadLink = `/download/invoice_${invoiceId}.pdf`;
+            res.status(200).json({
+                message: "Invoice generated successfully",
+                downloadLink,
+                invoiceId
             });
 
         } catch (error) {
@@ -101,6 +186,23 @@ exports.addInvoice = async (req, res) => {
             sqlError: error.sqlMessage,
             code: "INVOICE_CREATION_FAILED"
         });
+    }
+};
+
+// ✅ Download PDF
+exports.downloadPDF = async (req, res) => {
+    const { id } = req.params;
+    const filePath = path.join(pdfsDir, `invoice_${id}.pdf`);
+
+    if (fs.existsSync(filePath)) {
+        res.download(filePath, (err) => {
+            if (err) {
+                console.error('Error downloading file:', err);
+                res.status(500).send('Error downloading file');
+            }
+        });
+    } else {
+        res.status(404).send('File not found');
     }
 };
 
