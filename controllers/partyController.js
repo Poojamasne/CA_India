@@ -69,24 +69,22 @@ exports.addpartyEntry = async (req, res) => {
 // Get all parties (with user filtering)
 exports.getAllpartys = async (req, res) => {
     try {
-        // Option 1: Get all parties (admin view)
-        // const [results] = await db.execute("SELECT * FROM parties");
-        
-        // Option 2: Get parties for specific user (recommended)
-        const { user_id } = req.query;
-        if (!user_id) {
-            return res.status(400).json({ message: "user_id is required" });
+        const { user_id, book_id } = req.query;
+
+        if (!user_id || !book_id) {
+            return res.status(400).json({ message: "user_id and book_id are required" });
         }
 
         const [results] = await db.execute(
-            "SELECT * FROM parties WHERE user_id = ?", 
-            [user_id]
+            "SELECT * FROM parties WHERE user_id = ? AND book_id = ?", 
+            [user_id, book_id]
         );
 
         res.json({
             parties: results,
             count: results.length,
-            user_id: user_id
+            user_id,
+            book_id
         });
     } catch (error) {
         res.status(500).json({ 
@@ -95,6 +93,7 @@ exports.getAllpartys = async (req, res) => {
         });
     }
 };
+
 
 // Update a party
 exports.updatepartyEntry = async (req, res) => {

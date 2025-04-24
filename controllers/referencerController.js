@@ -2,36 +2,42 @@ const db = require('../db');
 
 // Add a new referencer to a book
 exports.addReferencer = async (req, res) => {
-    const { book_id } = req.params;
-    const { referencer } = req.body;
+    const { book_id } = req.params; // Assuming book_id is passed in the URL parameters
+    const { referencer, user_id } = req.body; // Get referencer and user_id from the request body
 
     if (!referencer) {
         return res.status(400).json({ success: false, message: "Referencer is required" });
     }
 
+    if (!user_id) {
+        return res.status(400).json({ success: false, message: "User ID is required" });
+    }
+
     try {
-        // Check if book exists
-        const [book] = await db.query("SELECT book_id FROM books WHERE book_id = ?", [book_id]);
+        // Check if book exists and belongs to the user
+        const [book] = await db.query("SELECT book_id FROM books WHERE book_id = ? AND user_id = ?", [book_id, user_id]);
+
+        console.log('Book query result:', book);
 
         if (book.length === 0) {
-            return res.status(404).json({ success: false, message: "Book not found" });
+            return res.status(404).json({ success: false, message: "Book not found or you do not have permission to add a referencer" });
         }
 
         // Insert into book_referencers table
         await db.query(`
-            INSERT INTO book_referencers (book_id, referencer, created_at) 
-            VALUES (?, ?, NOW())
-        `, [book_id, referencer]);
+            INSERT INTO book_referencers (book_id, user_id, referencer, created_at) 
+            VALUES (?, ?, ?, NOW())
+        `, [book_id, user_id, referencer]);
 
         // Update books table's latest referencer field
-        await db.query("UPDATE books SET referencer = ? WHERE book_id = ?", [referencer, book_id]);
+        await db.query("UPDATE books SET referencer = ? WHERE book_id = ? AND user_id = ?", [referencer, book_id, user_id]);
 
         res.status(200).json({ success: true, message: "Referencer added successfully" });
     } catch (err) {
+        console.error('Database error:', err);
         res.status(500).json({ success: false, message: "Failed to add referencer", error: err.message });
     }
 };
-
 
 // Get referencer for a book
 // exports.getReferencer = async (req, res) => {

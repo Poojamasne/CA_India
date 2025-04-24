@@ -106,24 +106,56 @@ const db = require("../db");
 // };
 
 exports.addCategoryGroup = async (req, res) => {
-    const { category_group } = req.body;
+    const { category_group, user_id } = req.body;
 
-    if (!category_group) {
-        return res.status(400).json({ success: false, message: "Category group is required" });
+    // Validate both fields
+    if (!category_group || !user_id) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Both category group and user ID are required" 
+        });
+    }
+
+    // Ensure user_id is a valid number
+    const numericUserId = parseInt(user_id, 10);
+    if (isNaN(numericUserId)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "User ID must be a valid number" 
+        });
     }
 
     try {
+        // Check if the category group already exists for this user
+        const [existing] = await db.query(
+            "SELECT * FROM categories WHERE category_group = ? AND user_id = ?",
+            [category_group, numericUserId]
+        );
+
+        if (existing.length > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Category group already exists for this user" 
+            });
+        }
+
+        // Insert with both fields
         const [result] = await db.query(
-            "INSERT INTO categories (category_group) VALUES (?)",
-            [category_group]
+            "INSERT INTO categories (category_group, user_id) VALUES (?, ?)",
+            [category_group, numericUserId]
         );
 
         res.status(201).json({
             success: true,
             message: "Category group added successfully",
-            category_group: { id: result.insertId, category_group }
+            category_group: { 
+                id: result.insertId, 
+                category_group,
+                user_id: numericUserId
+            }
         });
     } catch (err) {
+        console.error("Database error:", err);
         res.status(500).json({
             success: false,
             message: "Failed to add category group",

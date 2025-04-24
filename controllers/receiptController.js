@@ -84,37 +84,53 @@ exports.addReceiptEntry = async (req, res) => {
 // 📌 Get all receipt entries (ASYNC/AWAIT)
 exports.getAllReceipts = async (req, res) => {
     try {
-        const { user_id } = req.query;
+        const { user_id, sort = 'new_to_old' } = req.query;
+        
         if (!user_id) {
             return res.status(400).json({ error: "user_id is required" });
         }
 
+        // Validate sort parameter
+        const validSortOptions = ['new_to_old', 'old_to_new'];
+        if (!validSortOptions.includes(sort)) {
+            return res.status(400).json({ error: "Invalid sort parameter. Use 'new_to_old' or 'old_to_new'" });
+        }
+
         const [results] = await db.execute(
-            `SELECT *, 
-             DATE_FORMAT(created_at, '%d %b %Y') AS date, 
-             DATE_FORMAT(created_at, '%h:%i %p') AS time 
-             FROM receipt_entries 
-             WHERE user_id = ?`,
+            `SELECT r.*, 
+             p.party AS party_name,
+             DATE_FORMAT(r.created_at, '%d %b %Y') AS formatted_date, 
+             DATE_FORMAT(r.created_at, '%h:%i %p') AS formatted_time 
+             FROM receipt_entries r
+             LEFT JOIN parties p ON r.party_id = p.id AND r.user_id = p.user_id
+             WHERE r.user_id = ?
+             ORDER BY r.created_at ${sort === 'new_to_old' ? 'DESC' : 'ASC'}`,
             [user_id]
         );
 
-        // Optional: Modify status based on receipt_type or any other logic
-        const receiptsWithStatus = results.map(receipt => ({
+        // Process results with proper status and additional fields
+        const processedReceipts = results.map(receipt => ({
             ...receipt,
-            status: receipt.status || (
-                receipt.receipt_type === 'receipt' ? 'credit' : 'debit'
-            )
+            status: receipt.status || (receipt.receipt_type === 'receipt' ? 'credit' : 'debit'),
+            date: receipt.formatted_date,
+            time: receipt.formatted_time,
+            partyName: receipt.party_name || 'Unknown Party' // Fallback for null party names
         }));
 
         res.json({ 
-            receipts: receiptsWithStatus,
-            count: receiptsWithStatus.length,
-            user_id: user_id
+            success: true,
+            receipts: processedReceipts,
+            count: processedReceipts.length,
+            user_id: user_id,
+            sort_order: sort
         });
 
     } catch (error) {
+        console.error('Error fetching receipts:', error);
         res.status(500).json({ 
-            error: error.message,
+            success: false,
+            error: "Failed to fetch receipts",
+            details: error.message,
             sqlError: error.sqlMessage
         });
     }

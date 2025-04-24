@@ -26,6 +26,8 @@ const ProfileRoutes = require("./routes/ProfileRoutes");
 const FilterRoutes = require('./routes/FilterRoutes');
 const transferRoutes = require("./routes/TransferRoutes");
 const referencerRoutes = require('./routes/referencerRoutes');
+const InvoiceDetailRoutes = require('./routes/InvoiceDetailRoutes');
+const filterFlowRoutes = require('./routes/FilterFlowRoutes');
 
 const app = express();
 const server = createServer(app);
@@ -48,6 +50,9 @@ if (!fs.existsSync(pdfsDir)) {
 }
 
 app.use('/download', express.static(pdfsDir));
+
+// Then dynamic routes
+app.use('/download', InvoiceDetailRoutes);
 
 const connectedClients = new Set();
 
@@ -95,6 +100,8 @@ app.use('/api', ProfileRoutes);
 app.use('/api', FilterRoutes);
 app.use("/api", transferRoutes);
 app.use('/api', referencerRoutes); 
+app.use('/api', InvoiceDetailRoutes);
+app.use('/api', filterFlowRoutes);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

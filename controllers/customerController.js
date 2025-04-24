@@ -37,27 +37,52 @@ exports.addCustomerField = async (req, res) => {
             [field_name.trim(), parseInt(user_id), parseInt(book_id)]
         );
 
+        // Verify the insert was successful
+        if (!result.insertId) {
+            throw new Error("Insert operation failed - no ID returned");
+        }
+
+        // Fetch the newly created record
+        const [newField] = await db.execute(
+            `SELECT id, field_name, user_id, book_id, created_at 
+             FROM customer_fields 
+             WHERE id = ?`,
+            [result.insertId]
+        );
+
         return res.status(201).json({
             success: true,
-            message: "Customer field created",
-            data: {
-                id: result.insertId,
-                field_name: field_name.trim(),
-                user_id: parseInt(user_id),
-                book_id: parseInt(book_id)
-            }
+            message: "Customer field created successfully",
+            data: newField[0]
         });
 
     } catch (error) {
-        console.error("Create error:", error);
+        console.error("Database operation failed:", error);
+        
+        // Handle specific database errors
+        if (error.code === 'ER_NO_REFERENCED_ROW_2') {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid user_id or book_id - referenced record not found",
+                code: "REFERENCE_ERROR"
+            });
+        } else if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({
+                success: false,
+                message: "Field name already exists for this user and book",
+                code: "DUPLICATE_FIELD"
+            });
+        }
+
+        // Generic database error
         return res.status(500).json({
             success: false,
             message: "Failed to create field",
-            code: "DATABASE_ERROR"
+            code: "DATABASE_ERROR",
+            systemError: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
-
 
 exports.getAllCustomerFields = async (req, res) => {
     try {

@@ -60,24 +60,46 @@ const getCategoryGroups = async (req, res) => {
 
 // ✅ Add a new category group dynamically
 const addCategoryGroup = async (req, res) => {
-    const { group_name } = req.body;
-    
-    if (!group_name) {
+    // First, verify the request content type
+    if (!req.is('application/json')) {
+        return res.status(400).json({ message: "Content-Type must be application/json" });
+    }
+
+    const { group_name, user_id } = req.body;
+
+    // More detailed validation
+    if (!group_name || group_name.trim() === '') {
         return res.status(400).json({ message: "Group name is required" });
     }
 
-    const [existingGroup] = await db.query("SELECT * FROM category_groups WHERE group_name = ?", [group_name]);
-    if (existingGroup.length > 0 || CATEGORY_GROUPS.includes(group_name)) {
-        return res.status(400).json({ message: "Category group already exists" });
+    if (!user_id || isNaN(user_id)) {
+        return res.status(400).json({ message: "Valid user ID is required" });
     }
 
+    const numericUserId = parseInt(user_id, 10);
+
     try {
-        const [result] = await db.query("INSERT INTO category_groups (group_name) VALUES (?)", [group_name]);
+        const [existingGroup] = await db.query(
+            "SELECT * FROM category_groups WHERE group_name = ? AND user_id = ?",
+            [group_name, numericUserId]
+        );
+
+        if (existingGroup.length > 0 || CATEGORY_GROUPS.includes(group_name)) {
+            return res.status(400).json({ message: "Category group already exists" });
+        }
+
+        const [result] = await db.query(
+            "INSERT INTO category_groups (group_name, user_id) VALUES (?, ?)",
+            [group_name, numericUserId]
+        );
+
         res.json({ message: "Category group added successfully", id: result.insertId });
     } catch (err) {
+        console.error("Database error:", err);
         res.status(500).json({ error: err.message });
     }
 };
+
 
 // ✅ Create a new category
 // const createCategory = async (req, res) => {

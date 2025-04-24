@@ -275,6 +275,7 @@ exports.addInvoice = async (req, res) => {
             // Provide download link in the response
             const downloadLink = `/download/invoice_${invoiceId}.pdf`;
             res.status(200).json({
+                success: true,
                 message: "Invoice generated successfully",
                 downloadLink,
                 invoiceId

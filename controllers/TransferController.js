@@ -66,13 +66,13 @@ const generateTransferNumber = async () => {
 //     }
 // };
 exports.addTransfer = async (req, res) => {
-    const { date, recipient_id, sender_id, amount, book_id, recipient_name, sender_name } = req.body;
+    const { date, recipient_id, sender_id, amount, book_id, recipient_name, sender_name, user_id } = req.body;
 
     // 🔍 Validate required fields
-    if (!date || !recipient_id || !sender_id || !amount || !book_id || !recipient_name || !sender_name) {
+    if (!date || !recipient_id || !sender_id || !amount || !book_id || !recipient_name || !sender_name || !user_id) {
         return res.status(400).json({ 
             success: false,
-            message: "All fields including recipient_name and sender_name are required" 
+            message: "All fields including recipient_name, sender_name, and user_id are required" 
         });
     }
 
@@ -95,10 +95,10 @@ exports.addTransfer = async (req, res) => {
 
         const sql = `
             INSERT INTO transfers 
-                (transfer_no, date, recipient_id, recipient_name, sender_id, sender_name, amount, book_id) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+                (transfer_no, date, recipient_id, recipient_name, sender_id, sender_name, amount, book_id, user_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         const values = [
-            transferNo, date, recipient_id, recipient_name, sender_id, sender_name, amount, book_id
+            transferNo, date, recipient_id, recipient_name, sender_id, sender_name, amount, book_id, user_id
         ];
 
         const [result] = await db.query(sql, values);
@@ -119,7 +119,6 @@ exports.addTransfer = async (req, res) => {
         });
     }
 };
-
 
 
 // ✅ GET: Fetch All Transfers
