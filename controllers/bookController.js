@@ -389,6 +389,8 @@ exports.deleteBook = async (req, res) => {
 //     }
 // };
 
+
+
 exports.getBookById = async (req, res) => {
     const { book_id, user_id } = req.params;
 
@@ -409,6 +411,15 @@ exports.getBookById = async (req, res) => {
                 b.business_id, 
                 b.created_at,
                 b.user_id,
+                b.receipt,
+                b.payment,
+                b.net_balance,
+                b.balance,
+                b.recent_entries_date,
+                b.income_tax_challan,
+                b.party_id,
+                b.entry_by,
+                b.entry_time,
                 (
                     SELECT COUNT(*) 
                     FROM book_members 
@@ -434,17 +445,7 @@ exports.getBookById = async (req, res) => {
                         ORDER BY created_at DESC 
                         LIMIT 3
                     ) AS re
-                ) AS recent_receipts,
-                (
-                    SELECT IFNULL(SUM(amount), 0)
-                    FROM receipt_entries
-                    WHERE book_id = b.book_id AND receipt_type = 'receipt'
-                ) AS receipt,
-                (
-                    SELECT IFNULL(SUM(amount), 0)
-                    FROM receipt_entries
-                    WHERE book_id = b.book_id AND receipt_type = 'payment'
-                ) AS payment
+                ) AS recent_receipts
              FROM books b
              WHERE b.book_id = ?
                AND (
@@ -466,23 +467,22 @@ exports.getBookById = async (req, res) => {
             });
         }
 
-        const receipt = Number(book[0].receipt) || 0;
-        const payment = Number(book[0].payment) || 0;
-        const net_balance = receipt - payment;
+        const bookData = book[0];
 
         res.status(200).json({
             success: true,
             book: {
-                ...book[0],
-                inventory_status: Boolean(book[0].inventory_status),
-                created_at: new Date(book[0].created_at).toLocaleString(),
-                member_count: book[0].member_count || 0,
-                receipt,
-                payment,
-                net_balance,
-                recent_receipts: Array.isArray(book[0].recent_receipts)
-                    ? book[0].recent_receipts
-                    : JSON.parse(book[0].recent_receipts || "[]")
+                ...bookData,
+                inventory_status: Boolean(bookData.inventory_status),
+                created_at: new Date(bookData.created_at).toLocaleString(),
+                member_count: bookData.member_count || 0,
+                net_balance: Number(bookData.net_balance ?? 0),
+                receipt: Number(bookData.receipt ?? 0),
+                payment: Number(bookData.payment ?? 0),
+                balance: Number(bookData.balance ?? 0),
+                recent_receipts: Array.isArray(bookData.recent_receipts)
+                    ? bookData.recent_receipts
+                    : JSON.parse(bookData.recent_receipts || "[]")
             },
             user_id: parseInt(user_id),
             timestamp: new Date().toISOString()
@@ -498,8 +498,6 @@ exports.getBookById = async (req, res) => {
         });
     }
 };
-
-
 
 
 
