@@ -167,7 +167,7 @@ exports.getAllMembersByBookId = async (req, res) => {
 
     try {
         const [members] = await db.query(
-            `SELECT id, member_name, phone_number 
+            `SELECT id, member_name, phone_number, role 
              FROM book_members 
              WHERE book_id = ?`, 
             [book_id]
@@ -180,7 +180,11 @@ exports.getAllMembersByBookId = async (req, res) => {
             count: members.length
         });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Failed to fetch members", error: err.message });
+        res.status(500).json({ 
+            success: false, 
+            message: "Failed to fetch members", 
+            error: err.message 
+        });
     }
 };
 
