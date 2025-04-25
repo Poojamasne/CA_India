@@ -117,12 +117,12 @@ exports.renameBook = async (req, res) => {
 
 // ✅ Add a member to a book with phone number
 exports.addMember = async (req, res) => {
-    const { book_id, member_name, phone_number } = req.body;
+    const { book_id, member_name, phone_number, role } = req.body;
 
-    if (!book_id || !member_name || !phone_number) {
+    if (!book_id || !member_name || !phone_number || !role) {
         return res.status(400).json({ 
             success: false, 
-            message: "Book ID, Member Name, and Phone Number are required" 
+            message: "Book ID, Member Name, Phone Number, and Role are required" 
         });
     }
 
@@ -137,10 +137,10 @@ exports.addMember = async (req, res) => {
             });
         }
 
-        // Insert the member with phone number
+        // Insert the member with phone number and role
         await db.query(
-            "INSERT INTO book_members (book_id, member_name, phone_number) VALUES (?, ?, ?)", 
-            [book_id, member_name, phone_number]
+            "INSERT INTO book_members (book_id, member_name, phone_number, role) VALUES (?, ?, ?, ?)", 
+            [book_id, member_name, phone_number, role]
         );
 
         res.status(201).json({ 
@@ -155,6 +155,7 @@ exports.addMember = async (req, res) => {
         });
     }
 };
+
 
 // 📌 Get all members by book_id
 exports.getAllMembersByBookId = async (req, res) => {
@@ -503,6 +504,87 @@ exports.addnewBook = async (req, res) => {
     }
 };
 
+// ✅ Search books by business and user
+exports.searchBooks = async (req, res) => {
+    const { businessId, userId } = req.query;
+
+    // Validate required parameters
+    if (!businessId || !userId) {
+        return res.status(400).json({
+            success: false,
+            message: "Both businessId and userId are required",
+            code: "MISSING_PARAMETERS"
+        });
+    }
+
+    try {
+        // Verify user exists
+        const [user] = await db.query(
+            "SELECT id FROM users WHERE id = ?",
+            [userId]
+        );
+
+        if (user.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+                code: "USER_NOT_FOUND"
+            });
+        }
+
+        // Verify business exists
+        const [business] = await db.query(
+            "SELECT business_id FROM businesses WHERE business_id = ?",
+            [businessId]
+        );
+
+        if (business.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Business not found",
+                code: "BUSINESS_NOT_FOUND"
+            });
+        }
+
+        // Search books that belong to both the user and business
+        const [books] = await db.query(
+            `SELECT 
+                b.book_id, 
+                b.book_name, 
+                b.inventory_status,
+                b.created_at,
+                COUNT(bm.id) AS member_count
+             FROM books b
+             LEFT JOIN book_members bm ON b.book_id = bm.book_id
+             WHERE b.business_id = ? AND b.user_id = ?
+             GROUP BY b.book_id
+             ORDER BY b.created_at DESC`,
+            [businessId, userId]
+        );
+
+        res.status(200).json({
+            success: true,
+            data: books.map(book => ({
+                ...book,
+                inventory_status: Boolean(book.inventory_status),
+                created_at: new Date(book.created_at).toISOString()
+            })),
+            count: books.length,
+            businessId: parseInt(businessId),
+            userId: parseInt(userId),
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (err) {
+        console.error("Database error:", err);
+        res.status(500).json({
+            success: false,
+            message: "Failed to search books",
+            error: err.message,
+            code: "BOOK_SEARCH_FAILED"
+        });
+    }
+};
 
 // // // ✅ Get ALL Books by User ID
 // exports.getAllBooksByUserId = async (req, res) => {

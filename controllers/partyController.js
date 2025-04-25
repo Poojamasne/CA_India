@@ -9,28 +9,21 @@ exports.addpartyEntry = async (req, res) => {
         address, 
         state, 
         contact_number, 
-        alt_contact_number, 
         reference_name, 
         customerFieldId,  // corresponds to customer_field in DB
         grade,
         user_id,
-        book_id           // NEW: Add book_id
+        book_id,          // NEW: Add book_id
+        add_email         // NEW: Add add_email
     } = req.body;
 
-    // Validation with book_id included
-    if (!party || !gst_number || !address || !state || !contact_number || !customerFieldId || !grade || !user_id || !book_id) {
+    // Only party and contact_number are required
+    if (!party || !contact_number) {
         return res.status(400).json({ 
-            message: "All required fields must be provided",
+            message: "Party name and contact number are required",
             missing_fields: {
                 party: !party,
-                gst_number: !gst_number,
-                address: !address,
-                state: !state,
-                contact_number: !contact_number,
-                customerFieldId: !customerFieldId,
-                grade: !grade,
-                user_id: !user_id,
-                book_id: !book_id
+                contact_number: !contact_number
             }
         });
     }
@@ -38,15 +31,15 @@ exports.addpartyEntry = async (req, res) => {
     try {
         const query = `
             INSERT INTO parties 
-            (party, gst_number, address, state, contact_number, alt_contact_number, 
-             reference_name, customer_field, grade, user_id, book_id) 
+            (party, gst_number, address, state, contact_number, 
+             reference_name, customer_field, grade, user_id, book_id, add_email) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const [result] = await db.execute(query, [
-            party, gst_number, address, state, contact_number, 
-            alt_contact_number, reference_name, customerFieldId,
-            grade, user_id, book_id
+            party, gst_number || null, address || null, state || null, contact_number,
+            reference_name || null, customerFieldId || null, grade || null,
+            user_id || null, book_id || null, add_email || null
         ]);
 
         res.status(201).json({ 
