@@ -137,15 +137,16 @@ exports.addMember = async (req, res) => {
             });
         }
 
-        // Insert the member with phone number and role
-        await db.query(
+        // Insert the member and get the insertId
+        const [result] = await db.query(
             "INSERT INTO book_members (book_id, member_name, phone_number, role) VALUES (?, ?, ?, ?)", 
             [book_id, member_name, phone_number, role]
         );
 
         res.status(201).json({ 
             success: true, 
-            message: "Member added successfully" 
+            message: "Member added successfully",
+            member_id: result.insertId // ← return new member ID here
         });
     } catch (err) {
         res.status(500).json({ 
@@ -156,6 +157,49 @@ exports.addMember = async (req, res) => {
     }
 };
 
+
+exports.updateMember = async (req, res) => {
+    const { id } = req.params; // member ID
+    const { member_name, phone_number, role } = req.body;
+
+    if (!id || !member_name || !phone_number || !role) {
+        return res.status(400).json({
+            success: false,
+            message: "Member ID, Name, Phone Number, and Role are required"
+        });
+    }
+
+    try {
+        // Check if the member exists
+        const [existingMember] = await db.query("SELECT * FROM book_members WHERE id = ?", [id]);
+
+        if (existingMember.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Member not found"
+            });
+        }
+
+        // Update member details
+        await db.query(
+            `UPDATE book_members 
+             SET member_name = ?, phone_number = ?, role = ? 
+             WHERE id = ?`,
+            [member_name, phone_number, role, id]
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Member updated successfully"
+        });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: "Failed to update member",
+            error: err.message
+        });
+    }
+};
 
 // 📌 Get all members by book_id
 exports.getAllMembersByBookId = async (req, res) => {

@@ -28,6 +28,9 @@ router.put('/books/:book_id', verifyToken, bookController.renameBook);
 // Add a member to a book
 router.post('/books/members', verifyToken, bookController.addMember);
 
+router.put("/members/:id", verifyToken, bookController.updateMember);
+
+
 // Search books by business and user
 router.get('/books/search', bookController.searchBooks);
 
