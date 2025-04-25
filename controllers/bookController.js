@@ -423,7 +423,7 @@ exports.getBookById = async (req, res) => {
                             'receipt_type', re.receipt_type,
                             'created_at', DATE_FORMAT(re.created_at, '%Y-%m-%d %H:%i:%s'),
                             'partyName', re.party,
-                            'categorySplit', CAST(re.category_split AS JSON),  -- Parsing category_split as JSON
+                            'categorySplit', CAST(re.category_split AS JSON),
                             'balance', re.amount
                         )
                     )
@@ -434,7 +434,17 @@ exports.getBookById = async (req, res) => {
                         ORDER BY created_at DESC 
                         LIMIT 3
                     ) AS re
-                ) AS recent_receipts
+                ) AS recent_receipts,
+                (
+                    SELECT IFNULL(SUM(amount), 0)
+                    FROM receipt_entries
+                    WHERE book_id = b.book_id AND receipt_type = 'receipt'
+                ) AS receipt,
+                (
+                    SELECT IFNULL(SUM(amount), 0)
+                    FROM receipt_entries
+                    WHERE book_id = b.book_id AND receipt_type = 'payment'
+                ) AS payment
              FROM books b
              WHERE b.book_id = ?
                AND (
@@ -448,13 +458,17 @@ exports.getBookById = async (req, res) => {
             [book_id, user_id, user_id]
         );
 
-        if (book.length === 0) {
+        if (!book || book.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: "Book not found or not owned by user",
                 code: "BOOK_NOT_FOUND"
             });
         }
+
+        const receipt = Number(book[0].receipt) || 0;
+        const payment = Number(book[0].payment) || 0;
+        const net_balance = receipt - payment;
 
         res.status(200).json({
             success: true,
@@ -463,9 +477,12 @@ exports.getBookById = async (req, res) => {
                 inventory_status: Boolean(book[0].inventory_status),
                 created_at: new Date(book[0].created_at).toLocaleString(),
                 member_count: book[0].member_count || 0,
+                receipt,
+                payment,
+                net_balance,
                 recent_receipts: Array.isArray(book[0].recent_receipts)
-                ? book[0].recent_receipts
-                : JSON.parse(book[0].recent_receipts || "[]")
+                    ? book[0].recent_receipts
+                    : JSON.parse(book[0].recent_receipts || "[]")
             },
             user_id: parseInt(user_id),
             timestamp: new Date().toISOString()
@@ -481,6 +498,7 @@ exports.getBookById = async (req, res) => {
         });
     }
 };
+
 
 
 
