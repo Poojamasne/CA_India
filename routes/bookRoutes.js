@@ -11,7 +11,6 @@ const verifyToken = require('../middleware/auth'); // Ensure the path is correct
 // router.post("/books/members", bookController.addMember);      // Add member to book
 // router.delete("/books/:book_id", bookController.deleteBook);  // Delete book
 
-
 // Add a new book
 // router.post('/books', verifyToken, bookController.addBook);
 

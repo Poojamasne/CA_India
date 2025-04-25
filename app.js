@@ -5,7 +5,7 @@ const cors = require('cors');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const path = require('path'); 
-const fs = require('fs'); // Import the fs module
+const fs = require('fs'); 
 
 const userAuthRoutes = require('./routes/user-auth-routes');
 const bookRoutes = require('./routes/bookRoutes');
@@ -53,6 +53,10 @@ app.use('/download', express.static(pdfsDir));
 
 // Then dynamic routes
 app.use('/download', InvoiceDetailRoutes);
+
+
+// Routes
+app.use('/api/filter-flow', filterFlowRoutes);
 
 const connectedClients = new Set();
 
