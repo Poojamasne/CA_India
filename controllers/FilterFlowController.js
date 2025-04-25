@@ -236,6 +236,9 @@ const downloadFilteredPdf = async (req, res) => {
         // Pipe the PDF to the response
         doc.pipe(res);
 
+        // Add logo (if available)
+        // doc.image('path/to/logo.png', 50, 45, { width: 50 });
+
         // Add header
         doc.fontSize(18)
            .font('Helvetica-Bold')
@@ -245,8 +248,8 @@ const downloadFilteredPdf = async (req, res) => {
         // Add report metadata
         doc.fontSize(10)
            .font('Helvetica')
-           .text(`Generated on: ${new Date().toLocaleString()}`, { align: 'right' })
-           .text(`Total Entries: ${filteredData.length}`, { align: 'right' })
+           .text(`Duration: ${new Date().toLocaleString()}`, { align: 'right' })
+           .text(`Total Entries: ${filteredData.length}`, { align: 'left' })
            .moveDown(1);
 
         // Add filters summary
@@ -269,26 +272,33 @@ const downloadFilteredPdf = async (req, res) => {
             filtersText += `Entry Type: ${filters.entryType}\n`;
         }
 
+        if (filters.party && filters.party !== 'All') {
+            filtersText += `Party: ${filters.party}\n`;
+        }
+
+        if (filters.paymentMode && filters.paymentMode !== 'All') {
+            filtersText += `Payment Mode: ${filters.paymentMode}\n`;
+        }
+
         doc.text(filtersText || 'No filters applied')
            .moveDown(1);
 
         // Define table parameters
         const startX = 30;
-        let startY = 200;
-        const rowHeight = 20;
+        let startY = 220;
+        const rowHeight = 25;
         const colWidth = {
-            receiptNo: 90,
-            date: 70,
-            party: 90,
-            amount: 70,
-            paymentMode: 80,
-            categorySplit: 120,
-            bank: 80
+            receiptNo: 100,
+            date: 80,
+            party: 120,
+            amount: 80,
+            paymentMode: 100,
+            status: 60
         };
 
         // Add table headers
         doc.font('Helvetica-Bold')
-           .fontSize(9)
+           .fontSize(10)
            .fillColor('#333333');
 
         doc.text('Receipt No', startX, startY);
@@ -296,8 +306,7 @@ const downloadFilteredPdf = async (req, res) => {
         doc.text('Party', startX + colWidth.receiptNo + colWidth.date, startY);
         doc.text('Amount', startX + colWidth.receiptNo + colWidth.date + colWidth.party, startY);
         doc.text('Payment Mode', startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount, startY);
-        doc.text('Category Split', startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount + colWidth.paymentMode, startY);
-        doc.text('Bank', startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount + colWidth.paymentMode + colWidth.categorySplit, startY);
+        doc.text('Status', startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount + colWidth.paymentMode, startY);
 
         // Draw header line
         doc.moveTo(startX, startY + 15)
@@ -308,7 +317,7 @@ const downloadFilteredPdf = async (req, res) => {
 
         // Reset font for data
         doc.font('Helvetica')
-           .fontSize(8)
+           .fontSize(9)
            .fillColor('#000000');
 
         // Add data rows
@@ -324,15 +333,14 @@ const downloadFilteredPdf = async (req, res) => {
                 
                 // Repeat headers on new page
                 doc.font('Helvetica-Bold')
-                   .fontSize(9)
+                   .fontSize(10)
                    .fillColor('#333333')
                    .text('Receipt No', startX, currentY)
                    .text('Date', startX + colWidth.receiptNo, currentY)
                    .text('Party', startX + colWidth.receiptNo + colWidth.date, currentY)
                    .text('Amount', startX + colWidth.receiptNo + colWidth.date + colWidth.party, currentY)
                    .text('Payment Mode', startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount, currentY)
-                   .text('Category Split', startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount + colWidth.paymentMode, currentY)
-                   .text('Bank', startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount + colWidth.paymentMode + colWidth.categorySplit, currentY);
+                   .text('Status', startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount + colWidth.paymentMode, currentY);
                 
                 doc.moveTo(startX, currentY + 15)
                    .lineTo(startX + Object.values(colWidth).reduce((a, b) => a + b, 0), currentY + 15)
@@ -342,7 +350,7 @@ const downloadFilteredPdf = async (req, res) => {
                 
                 currentY += rowHeight;
                 doc.font('Helvetica')
-                   .fontSize(8)
+                   .fontSize(9)
                    .fillColor('#000000');
             }
             
@@ -364,22 +372,8 @@ const downloadFilteredPdf = async (req, res) => {
                 maximumFractionDigits: 2
             }).format(entry.amount || 0);
 
-            // Format category split
-            let categorySplitText = '-';
-            try {
-                if (entry.category_split) {
-                    if (entry.category_split.startsWith('[')) {
-                        // Parse JSON array
-                        const categories = JSON.parse(entry.category_split);
-                        categorySplitText = categories.map(c => `${c.name}: ${c.amount}`).join('\n');
-                    } else {
-                        // Use as plain text
-                        categorySplitText = entry.category_split;
-                    }
-                }
-            } catch (e) {
-                categorySplitText = entry.category_split || '-';
-            }
+            // Format status with color
+            const statusColor = entry.status === 'credit' ? '#009900' : '#ff0000';
 
             // Add row data
             doc.text(entry.receipt_no || '-', startX, currentY);
@@ -392,17 +386,11 @@ const downloadFilteredPdf = async (req, res) => {
             doc.text(entry.payment_mode || '-', 
                    startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount, currentY);
             
-            // Category split with multiple lines if needed
-            const splitLines = categorySplitText.split('\n');
-            splitLines.forEach((line, i) => {
-                doc.text(line || '-', 
-                       startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount + colWidth.paymentMode, 
-                       currentY + (i * 12));
-            });
-            
-            doc.text(entry.selected_bank || '-', 
-                   startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount + colWidth.paymentMode + colWidth.categorySplit, 
-                   currentY);
+            // Status with color
+            doc.fillColor(statusColor)
+               .text(entry.status || '-', 
+                     startX + colWidth.receiptNo + colWidth.date + colWidth.party + colWidth.amount + colWidth.paymentMode, currentY)
+               .fillColor('#000000');
 
             // Draw row line
             doc.moveTo(startX, currentY + 15)
@@ -411,7 +399,7 @@ const downloadFilteredPdf = async (req, res) => {
                .strokeColor('#eeeeee')
                .stroke();
             
-            currentY += (splitLines.length > 1 ? splitLines.length * 12 : rowHeight);
+            currentY += rowHeight;
         });
 
         // Add footer with page numbers
