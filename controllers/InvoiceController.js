@@ -188,7 +188,8 @@ exports.addInvoice = async (req, res) => {
             items,
             user_id,
             book_id,
-            bank_account_id
+            bank_account_id,
+            gstin
         } = req.body;
 
         // Validate required fields
@@ -214,9 +215,23 @@ exports.addInvoice = async (req, res) => {
         }
         const { name, phone_number, email } = userResult[0];
 
-        // Calculate total values (with 0 tax values)
+        // Fetch the last invoice number
+        const [lastInvoice] = await db.query('SELECT InvoiceNo FROM invoices ORDER BY id DESC LIMIT 1');
+        let newInvoiceNo;
+        if (lastInvoice.length > 0 && lastInvoice[0].InvoiceNo) {
+            const lastInvoiceNo = lastInvoice[0].InvoiceNo;
+            const lastNumber = parseInt(lastInvoiceNo.match(/\d+/)[0], 10);
+            newInvoiceNo = `INV${String(lastNumber + 1).padStart(5, '0')}`;
+        } else {
+            newInvoiceNo = 'INV00001';
+        }
+
+        // Calculate total values
         let total_taxable = items.reduce((sum, item) => sum + parseFloat(item.taxable_amount || 0), 0);
-        let total_amount = total_taxable - discount_amount + round_off;
+        let total_cgst = items.reduce((sum, item) => sum + (parseFloat(item.taxable_amount || 0) * (parseFloat(item.tax_rate || 0) / 2) / 100), 0);
+        let total_sgst = total_cgst;
+        let total_igst = 0.00; // Assuming IGST is not applicable in this case
+        let total_amount = total_taxable + total_cgst + total_sgst - discount_amount + round_off;
 
         // Extract hsn_code from the first item (or handle it as needed)
         const hsn_code = items[0]?.hsn_code || 'default_value';
@@ -225,16 +240,17 @@ exports.addInvoice = async (req, res) => {
         try {
             await connection.beginTransaction();
 
-            // Insert invoice with 0 values for tax fields
+            // Insert invoice with calculated tax values
             const [invoiceResult] = await connection.query(
                 `INSERT INTO invoices 
                     (type, customer_or_supplier, invoice_date, total_taxable, 
                      cgst, sgst, igst, total_amount, discount_amount, 
-                     percentage, round_off, user_id, book_id, bank_account_id, hsn_code)
-                 VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     percentage, round_off, user_id, book_id, bank_account_id, hsn_code, gstin, InvoiceNo)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [type, customer_or_supplier, invoice_date, total_taxable, 
-                 total_amount, discount_amount, percentage, round_off, 
-                 user_id, book_id, bank_account_id, hsn_code]
+                 total_cgst, total_sgst, total_igst, total_amount,
+                 discount_amount, percentage, round_off, 
+                 user_id, book_id, bank_account_id, hsn_code, gstin, newInvoiceNo]
             );
 
             const invoiceId = invoiceResult.insertId;
@@ -245,7 +261,7 @@ exports.addInvoice = async (req, res) => {
                     `INSERT INTO invoice_items 
                         (invoice_id, item_name, taxable_amount, remark, user_id, hsn_code, quantity_unit, rate_per_unit, tax_rate)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [invoiceId, item.item_name, item.taxable_amount, item.remark || '', user_id, item.hsn_code, item.quantity_unit || 'default_unit', item.rate_per_unit || 0.00, item.tax_rate || 0.00]
+                    [invoiceId, item.item_name, item.taxable_amount, item.remark || '', user_id, item.hsn_code, item.quantity_unit, item.rate_per_unit, item.tax_rate]
                 );
             }
 
@@ -262,11 +278,16 @@ exports.addInvoice = async (req, res) => {
                 items,
                 totals: {
                     taxable: total_taxable,
+                    cgst: total_cgst,
+                    sgst: total_sgst,
+                    igst: total_igst,
                     discount: discount_amount,
                     round_off: round_off,
                     grand_total: total_amount
                 },
-                user_id
+                user_id,
+                gstin,
+                InvoiceNo: newInvoiceNo // Add InvoiceNo to invoice data
             };
 
             const filePath = path.join(pdfsDir, `invoice_${invoiceId}.pdf`);
@@ -278,7 +299,8 @@ exports.addInvoice = async (req, res) => {
                 success: true,
                 message: "Invoice generated successfully",
                 downloadLink,
-                invoiceId
+                invoiceId,
+                InvoiceNo: newInvoiceNo // Include the generated InvoiceNo in the response
             });
 
         } catch (error) {
