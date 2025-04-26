@@ -430,8 +430,395 @@ const downloadFilteredPdf = async (req, res) => {
 };
 
 // Keep your existing handleFieldOptions function
+// Helper function to get dropdown field options
 async function handleFieldOptions(req, res) {
-    // ... (your existing implementation)
+    const { user_id, entryType, dateFilter, CustomDate, Field } = req.query;
+
+    if (!Field) {
+        return res.status(400).json({ message: "Field parameter is required" });
+    }
+
+    let table = 'receipt_entries'; // default
+    if (entryType) {
+        const lowerEntryType = entryType.toLowerCase();
+        switch (lowerEntryType) {
+            case 'receipt': table = 'receipt_entries'; break;
+            case 'payment': table = 'payment_entries'; break;
+            case 'transfer': table = 'transfers'; break;
+            default:
+                return res.status(400).json({ message: "Invalid entryType. Must be receipt, payment, or transfer" });
+        }
+    }
+
+    let params = [];
+    let fieldQuery = '';
+
+    switch (Field.toLowerCase()) {
+        case 'party':
+            if (dateFilter === 'CustomDate' && CustomDate) {
+                const filterDate = moment(CustomDate, 'YYYY-MM-DD', true);
+                if (!filterDate.isValid()) {
+                    return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD" });
+                }
+                const formattedDate = filterDate.format('YYYY-MM-DD');
+                fieldQuery = `
+                    SELECT DISTINCT p.id, p.party AS name 
+                    FROM parties p
+                    LEFT JOIN ${table} t ON p.id = t.party_id AND t.user_id = p.user_id AND DATE(t.created_at) = ?
+                    WHERE p.user_id = ?
+                    ORDER BY p.party ASC
+                `;
+                params.push(formattedDate, user_id);
+            } else {
+                fieldQuery = `
+                    SELECT id, party AS name 
+                    FROM parties
+                    WHERE user_id = ?
+                    ORDER BY party ASC
+                `;
+                params.push(user_id);
+            }
+            break;
+            case 'referencer':
+                fieldQuery = `
+                    SELECT DISTINCT br.id, br.referencer AS name
+                    FROM book_referencers br
+                    WHERE br.user_id = ?
+                `;
+                params.push(user_id);
+            
+                if (dateFilter === 'CustomDate' && CustomDate) {
+                    const filterDate = moment(CustomDate, 'YYYY-MM-DD', true);
+                    if (!filterDate.isValid()) {
+                        return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD" });
+                    }
+                    const formattedDate = filterDate.format('YYYY-MM-DD');
+                    fieldQuery += ` AND DATE(br.created_at) = ?`;
+                    params.push(formattedDate);
+                }
+            
+                fieldQuery += ` ORDER BY br.referencer ASC`;
+                break;
+            
+                case 'category':
+                    if (dateFilter === 'CustomDate' && CustomDate) {
+                        // Filter based on the provided CustomDate
+                        fieldQuery = `
+                            SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id 
+                            FROM categories 
+                            WHERE user_id = ? AND DATE(created_at) = ?
+                            ORDER BY category_name ASC
+                        `;
+                        params.push(user_id, CustomDate);  // Add user_id and CustomDate for filtering
+                    } else {
+                        // If no date filter is provided, fetch all records for the user
+                        fieldQuery = `
+                            SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id
+                            FROM categories
+                            WHERE user_id = ?
+                            ORDER BY category_name ASC
+                        `;
+                        params.push(user_id);
+                    }
+                
+                    console.log('Category Query:', fieldQuery);
+                    console.log('Category Params:', params);
+                
+                    try {
+                        const [results] = await db.query(fieldQuery, params);
+                
+                        console.log('Category Results:', results);
+                
+                        return res.json({
+                            success: true,
+                            field: Field,
+                            options: results
+                        });
+                    } catch (error) {
+                        console.error('Database error:', error);
+                        return res.status(500).json({
+                            success: false,
+                            message: 'Failed to retrieve categories',
+                            error: error.message
+                        });
+                    }
+                    break;
+                
+
+            case 'group category':
+    if (dateFilter === 'CustomDate' && CustomDate) {
+        // Filter based on the provided CustomDate
+        fieldQuery = `
+            SELECT id, group_name 
+            FROM category_groups 
+            WHERE user_id = ? AND DATE(created_at) = ?
+            ORDER BY group_name ASC
+        `;
+        params.push(user_id, CustomDate);  // Add user_id and CustomDate for filtering
+    } else {
+        // If no date filter is provided, fetch all records for the user
+        fieldQuery = `
+            SELECT id, group_name 
+            FROM category_groups 
+            WHERE user_id = ?
+            ORDER BY group_name ASC
+        `;
+        params.push(user_id);
+    }
+
+    console.log('Group Category Query:', fieldQuery);
+    console.log('Group Category Params:', params);
+
+    try {
+        const [results] = await db.query(fieldQuery, params);
+
+        console.log('Group Category Results:', results);
+
+        return res.json({
+            success: true,
+            field: Field,
+            options: results
+        });
+    } catch (error) {
+        console.error('Database error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve group categories',
+            error: error.message
+        });
+    }
+    break;
+
+
+                case 'head account':
+    if (dateFilter === 'CustomDate' && CustomDate) {
+        // Validate the custom date
+        const filterDate = moment(CustomDate, 'YYYY-MM-DD', true);
+        if (!filterDate.isValid()) {
+            return res.status(400).json({ message: "Invalid CustomDate format. Use YYYY-MM-DD" });
+        }
+        const formattedDate = filterDate.format('YYYY-MM-DD');
+        
+        // Query for head accounts with custom date filter
+        fieldQuery = `
+            SELECT id, name 
+            FROM head_accounts 
+            WHERE user_id = ? 
+            AND DATE(created_at) = ?
+            ORDER BY name ASC
+        `;
+        params.push(user_id, formattedDate);
+    } else {
+        // Query for head accounts without date filter
+        fieldQuery = `
+            SELECT id, name 
+            FROM head_accounts 
+            WHERE user_id = ?
+            ORDER BY name ASC
+        `;
+        params.push(user_id);
+    }
+
+    console.log('Head Account Query:', fieldQuery);
+    console.log('Head Account Params:', params);
+
+    try {
+        const [results] = await db.query(fieldQuery, params);
+
+        console.log('Head Account Results:', results);
+
+        return res.json({
+            success: true,
+            field: Field,
+            options: results
+        });
+    } catch (error) {
+        console.error('Database error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve head accounts',
+            error: error.message
+        });
+    }
+    break;
+
+
+            case 'payment mode':
+                // Use appropriate table based on entryType
+                if (entryType) {
+                    const lowerEntryType = entryType.toLowerCase();
+                    switch (lowerEntryType) {
+                        case 'receipt': table = 'receipt_entries'; break;
+                        case 'payment': table = 'payment_entries'; break;
+                        case 'transfer': table = 'transfers'; break;
+                        default:
+                            return res.status(400).json({ message: "Invalid entryType. Must be receipt, payment, or transfer" });
+                    }
+                } else {
+                    // Default to payment_entries if no entryType specified
+                    table = 'payment_entries';
+                }
+            
+                // Build the query - using 'id' instead of 'payment_id'
+                let paymentModeQuery = `
+                    SELECT DISTINCT id, payment_mode AS name 
+                    FROM ${table} 
+                    WHERE user_id = ? 
+                    AND payment_mode IS NOT NULL
+                    AND payment_mode != ''
+                `;
+                
+                let paymentModeParams = [user_id];
+            
+                // Add date filter if specified
+                if (dateFilter === 'CustomDate' && CustomDate) {
+                    const filterDate = moment(CustomDate, 'YYYY-MM-DD', true);
+                    if (!filterDate.isValid()) {
+                        return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD" });
+                    }
+                    const formattedDate = filterDate.format('YYYY-MM-DD');
+                    paymentModeQuery += ` AND DATE(created_at) = ?`;
+                    paymentModeParams.push(formattedDate);
+                }
+            
+                // Add sorting
+                paymentModeQuery += ` ORDER BY payment_mode ASC`;
+            
+                console.log('Payment mode query:', paymentModeQuery);
+                console.log('Payment mode params:', paymentModeParams);
+            
+                try {
+                    const [paymentModeResults] = await db.query(paymentModeQuery, paymentModeParams);
+                    
+                    return res.json({
+                        success: true,
+                        field: Field,
+                        options: paymentModeResults,
+                        message: paymentModeResults.length === 0 ? 'No payment modes found' : 'Payment modes retrieved successfully'
+                    });
+                } catch (error) {
+                    console.error('Database error:', error);
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Failed to retrieve payment modes',
+                        error: error.message
+                    });
+                }   
+
+
+                case 'grade':
+    let gradeQuery = `
+        SELECT DISTINCT p.grade AS name, p.id AS sort_id
+        FROM parties p
+        WHERE p.user_id = ?
+    `;
+    params = [user_id];
+
+    if (dateFilter === 'CustomDate' && CustomDate) {
+        const filterDate = moment(CustomDate, 'YYYY-MM-DD', true);
+        if (!filterDate.isValid()) {
+            return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD" });
+        }
+        const formattedDate = filterDate.format('YYYY-MM-DD');
+        gradeQuery += ` AND DATE(p.created_at) = ?`;
+        params.push(formattedDate);
+    }
+
+    // Order by party id and then by grade name
+    gradeQuery += ` ORDER BY sort_id ASC, name ASC`;
+
+    console.log('Grade query:', gradeQuery);
+    console.log('Grade params:', params);
+
+    try {
+        const [gradeResults] = await db.query(gradeQuery, params);
+
+        // Use party ID as id, and grade as name
+        const formattedResults = gradeResults.map(result => ({
+            id: result.sort_id,
+            name: result.name
+        }));
+
+        return res.json({
+            success: true,
+            field: Field,
+            options: formattedResults,
+            message: gradeResults.length === 0 ? 'No grades found' : 'Grades retrieved successfully'
+        });
+    } catch (error) {
+        console.error('Database error (grade):', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve grades',
+            error: error.message
+        });
+    }
+            break;
+
+            case 'custom field':
+    if (dateFilter === 'CustomDate' && CustomDate) {
+        const filterDate = moment(CustomDate, 'YYYY-MM-DD', true);
+        if (!filterDate.isValid()) {
+            return res.status(400).json({ message: "Invalid CustomDate format. Use YYYY-MM-DD" });
+        }
+        const formattedDate = filterDate.format('YYYY-MM-DD');
+        
+        fieldQuery = `
+            SELECT id, field_name AS name 
+            FROM customer_fields 
+            WHERE user_id = ? 
+            AND DATE(created_at) = ?
+            ORDER BY field_name ASC
+        `;
+        params.push(user_id, formattedDate);
+    } else {
+        fieldQuery = `
+            SELECT id, field_name AS name 
+            FROM customer_fields 
+            WHERE user_id = ?
+            ORDER BY field_name ASC
+        `;
+        params.push(user_id);
+    }
+
+    console.log('Custom Field Query:', fieldQuery);
+    console.log('Custom Field Params:', params);
+
+    try {
+        const [results] = await db.query(fieldQuery, params);
+
+        console.log('Custom Field Results:', results);
+
+        return res.json({
+            success: true,
+            field: Field,
+            options: results
+        });
+    } catch (error) {
+        console.error('Database error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve custom fields',
+            error: error.message
+        });
+    }
+    break;
+        default:
+            return res.status(400).json({ message: "Invalid Field parameter" });
+    }
+
+    console.log('Field query:', fieldQuery);
+    console.log('Field params:', params);
+
+    const [results] = await db.query(fieldQuery, params);
+
+    console.log('Query results:', results);
+
+    return res.json({
+        success: true,
+        field: Field,
+        options: results
+    });
 }
 
 module.exports = {

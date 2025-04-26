@@ -340,8 +340,9 @@ exports.downloadPDF = async (req, res) => {
 // ✅ Get all invoices (filtered by user_id and optionally by type)
 exports.getInvoices = async (req, res) => {
     try {
-        const { type, user_id } = req.query;
+        const { type, user_id, debug } = req.query;
 
+        // Validate required parameters
         if (!user_id) {
             return res.status(400).json({ 
                 error: "user_id is required",
@@ -349,33 +350,126 @@ exports.getInvoices = async (req, res) => {
             });
         }
 
-        let sql = `SELECT * FROM invoices WHERE user_id = ?`;
-        const params = [user_id];
+        // OPTION 1: Single Query with JSON aggregation (original approach)
+        const getInvoicesSingleQuery = async () => {
+            let sql = `
+                SELECT 
+                    i.*,
+                    COUNT(ii.id) as item_count,  // Debugging field
+                    JSON_ARRAYAGG(
+                        CASE WHEN ii.id IS NULL THEN NULL
+                        ELSE JSON_OBJECT(
+                            'item_name', ii.item_name,
+                            'taxable_amount', ii.taxable_amount,
+                            'remark', ii.remark,
+                            'hsn_code', ii.hsn_code,
+                            'quantity_unit', ii.quantity_unit,
+                            'rate_per_unit', ii.rate_per_unit,
+                            'tax_rate', ii.tax_rate
+                        )
+                        END
+                    ) AS items
+                FROM invoices i
+                LEFT JOIN invoice_items ii ON i.id = ii.invoice_id
+                WHERE i.user_id = ?
+            `;
+            
+            const params = [user_id];
 
-        if (type) {
-            sql += ` AND type = ?`;
-            params.push(type);
-        }
+            if (type) {
+                sql += ` AND i.type = ?`;
+                params.push(type);
+            }
 
-        sql += ` ORDER BY invoice_date DESC`;
+            sql += ` GROUP BY i.id ORDER BY i.invoice_date DESC`;
 
-        const [invoices] = await db.query(sql, params);
-        
+            const [invoices] = await db.query(sql, params);
+
+            return invoices.map(invoice => ({
+                ...invoice,
+                items: invoice.items ? JSON.parse(invoice.items).filter(Boolean) : []
+            }));
+        };
+
+        // OPTION 2: Separate queries with manual joining (more reliable)
+        const getInvoicesSeparateQueries = async () => {
+            // Get base invoices
+            let invoiceSql = `SELECT * FROM invoices WHERE user_id = ?`;
+            const invoiceParams = [user_id];
+            
+            if (type) {
+                invoiceSql += ` AND type = ?`;
+                invoiceParams.push(type);
+            }
+            
+            invoiceSql += ` ORDER BY invoice_date DESC`;
+            
+            const [invoices] = await db.query(invoiceSql, invoiceParams);
+
+            // Return early if no invoices found
+            if (invoices.length === 0) {
+                return [];
+            }
+
+            // Get all items for these invoices
+            const [items] = await db.query(
+                `SELECT * FROM invoice_items WHERE invoice_id IN (?)`,
+                [invoices.map(i => i.id)]
+            );
+
+            // Group items by invoice_id
+            const itemsMap = items.reduce((map, item) => {
+                if (!map[item.invoice_id]) map[item.invoice_id] = [];
+                map[item.invoice_id].push({
+                    item_name: item.item_name,
+                    taxable_amount: item.taxable_amount,
+                    remark: item.remark,
+                    hsn_code: item.hsn_code,
+                    quantity_unit: item.quantity_unit,
+                    rate_per_unit: item.rate_per_unit,
+                    tax_rate: item.tax_rate
+                });
+                return map;
+            }, {});
+
+            // Combine invoices with their items
+            return invoices.map(invoice => ({
+                ...invoice,
+                items: itemsMap[invoice.id] || []
+            }));
+        };
+
+        // Choose which method to use (default to separate queries as it's more reliable)
+        const useSingleQuery = debug === 'single';
+        const invoices = await (useSingleQuery ? getInvoicesSingleQuery() : getInvoicesSeparateQueries());
+
+        // Debug information if requested
+        const debugInfo = debug ? {
+            query_used: useSingleQuery ? 'single' : 'separate',
+            stats: {
+                invoice_count: invoices.length,
+                items_count: invoices.reduce((sum, inv) => sum + inv.items.length, 0)
+            }
+        } : undefined;
+
         res.status(200).json({ 
+            success: true,
             invoices,
             count: invoices.length,
-            user_id
+            user_id,
+            ...(debugInfo && { debug: debugInfo })
         });
 
     } catch (error) {
         console.error("Error fetching invoices:", error);
         res.status(500).json({ 
+            success: false,
             error: error.message,
-            code: "INVOICE_FETCH_FAILED"
+            code: "INVOICE_FETCH_FAILED",
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 };
-
 // ✅ Get single invoice details (with user verification)
 exports.getInvoiceById = async (req, res) => {
     try {
