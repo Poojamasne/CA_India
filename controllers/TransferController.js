@@ -66,7 +66,7 @@ const generateTransferNumber = async () => {
 //     }
 // };
 exports.addTransfer = async (req, res) => {
-    const { date, recipient_id, sender_id, amount, book_id, recipient_name, sender_name, user_id } = req.body;
+    const { date, recipient_id, sender_id, amount, book_id, recipient_name, sender_name, user_id, remark } = req.body;
 
     // 🔍 Validate required fields
     if (!date || !recipient_id || !sender_id || !amount || !book_id || !recipient_name || !sender_name || !user_id) {
@@ -95,10 +95,11 @@ exports.addTransfer = async (req, res) => {
 
         const sql = `
             INSERT INTO transfers 
-                (transfer_no, date, recipient_id, recipient_name, sender_id, sender_name, amount, book_id, user_id) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                (transfer_no, date, recipient_id, recipient_name, sender_id, sender_name, amount, book_id, user_id, remark) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        
         const values = [
-            transferNo, date, recipient_id, recipient_name, sender_id, sender_name, amount, book_id, user_id
+            transferNo, date, recipient_id, recipient_name, sender_id, sender_name, amount, book_id, user_id, remark || null
         ];
 
         const [result] = await db.query(sql, values);
@@ -119,6 +120,7 @@ exports.addTransfer = async (req, res) => {
         });
     }
 };
+
 
 
 // ✅ GET: Fetch All Transfers

@@ -432,7 +432,7 @@ const downloadFilteredPdf = async (req, res) => {
 // Keep your existing handleFieldOptions function
 // Helper function to get dropdown field options
 async function handleFieldOptions(req, res) {
-    const { user_id, entryType, dateFilter, CustomDate, Field } = req.query;
+    const { user_id, entryType, dateFilter, CustomDate, startDate, endDate, Field } = req.query;
 
     if (!Field) {
         return res.status(400).json({ message: "Field parameter is required" });
@@ -455,30 +455,58 @@ async function handleFieldOptions(req, res) {
 
     switch (Field.toLowerCase()) {
         case 'party':
-            if (dateFilter === 'CustomDate' && CustomDate) {
-                const filterDate = moment(CustomDate, 'YYYY-MM-DD', true);
-                if (!filterDate.isValid()) {
-                    return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD" });
-                }
-                const formattedDate = filterDate.format('YYYY-MM-DD');
-                fieldQuery = `
-                    SELECT DISTINCT p.id, p.party AS name 
-                    FROM parties p
-                    LEFT JOIN ${table} t ON p.id = t.party_id AND t.user_id = p.user_id AND DATE(t.created_at) = ?
-                    WHERE p.user_id = ?
-                    ORDER BY p.party ASC
-                `;
-                params.push(formattedDate, user_id);
-            } else {
-                fieldQuery = `
-                    SELECT id, party AS name 
-                    FROM parties
-                    WHERE user_id = ?
-                    ORDER BY party ASC
-                `;
-                params.push(user_id);
-            }
-            break;
+    if (dateFilter === 'CustomDate' && CustomDate) {
+        // Filter based on a single CustomDate
+        fieldQuery = `
+            SELECT id, party
+            FROM parties
+            WHERE user_id = ? AND DATE(created_at) = ?
+            ORDER BY party ASC
+        `;
+        params.push(user_id, CustomDate);
+    } else if (dateFilter === 'CustomPeriod' && startDate && endDate) {
+        // Filter based on a date range (startDate to endDate)
+        fieldQuery = `
+            SELECT id, party
+            FROM parties
+            WHERE user_id = ? AND DATE(created_at) BETWEEN ? AND ?
+            ORDER BY party ASC
+        `;
+        params.push(user_id, startDate, endDate);
+    } else {
+        // If no date filter is provided, fetch all records for the user
+        fieldQuery = `
+            SELECT id, party
+            FROM parties
+            WHERE user_id = ?
+            ORDER BY party ASC
+        `;
+        params.push(user_id);
+    }
+
+    console.log('Party Query:', fieldQuery);
+    console.log('Party Params:', params);
+
+    try {
+        const [results] = await db.query(fieldQuery, params);
+
+        console.log('Party Results:', results);
+
+        return res.json({
+            success: true,
+            field: Field,
+            options: results
+        });
+    } catch (error) {
+        console.error('Database error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve parties',
+            error: error.message
+        });
+    }
+    break;
+
             case 'referencer':
                 fieldQuery = `
                     SELECT DISTINCT br.id, br.referencer AS name
@@ -501,48 +529,64 @@ async function handleFieldOptions(req, res) {
                 break;
             
                 case 'category':
-                    if (dateFilter === 'CustomDate' && CustomDate) {
-                        // Filter based on the provided CustomDate
-                        fieldQuery = `
-                            SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id 
-                            FROM categories 
-                            WHERE user_id = ? AND DATE(created_at) = ?
-                            ORDER BY category_name ASC
-                        `;
-                        params.push(user_id, CustomDate);  // Add user_id and CustomDate for filtering
-                    } else {
-                        // If no date filter is provided, fetch all records for the user
-                        fieldQuery = `
-                            SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id
-                            FROM categories
-                            WHERE user_id = ?
-                            ORDER BY category_name ASC
-                        `;
-                        params.push(user_id);
-                    }
-                
-                    console.log('Category Query:', fieldQuery);
-                    console.log('Category Params:', params);
-                
-                    try {
-                        const [results] = await db.query(fieldQuery, params);
-                
-                        console.log('Category Results:', results);
-                
-                        return res.json({
-                            success: true,
-                            field: Field,
-                            options: results
-                        });
-                    } catch (error) {
-                        console.error('Database error:', error);
-                        return res.status(500).json({
-                            success: false,
-                            message: 'Failed to retrieve categories',
-                            error: error.message
-                        });
-                    }
-                    break;
+    if (dateFilter === 'CustomDate' && CustomDate) {
+        // Filter based on the provided CustomDate
+        fieldQuery = `
+            SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id 
+            FROM categories 
+            WHERE user_id = ? AND DATE(created_at) = ?
+            ORDER BY category_name ASC
+        `;
+        params.push(user_id, CustomDate); // Add user_id and CustomDate for filtering
+    } else if (dateFilter === 'CustomPeriod' && startDate && endDate) {
+        // Filter between startDate and endDate
+        fieldQuery = `
+            SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id 
+            FROM categories 
+            WHERE user_id = ? AND DATE(created_at) BETWEEN ? AND ?
+            ORDER BY category_name ASC
+        `;
+        params.push(user_id, startDate, endDate); // Add user_id, startDate, endDate
+    } else {
+        // If no date filter is provided, fetch all records for the user
+        fieldQuery = `
+            SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id
+            FROM categories
+            WHERE user_id = ?
+            ORDER BY category_name ASC
+        `;
+        params.push(user_id);
+    }
+
+    console.log('Category Query:', fieldQuery);
+    console.log('Category Params:', params);
+
+    try {
+        const [results] = await db.query(fieldQuery, params);
+
+        console.log('Category Results:', results);
+
+        // Only return id and category_name
+        const filteredResults = results.map(item => ({
+            id: item.id,
+            category_name: item.category_name
+        }));
+
+        return res.json({
+            success: true,
+            field: Field,
+            options: filteredResults
+        });
+    } catch (error) {
+        console.error('Database error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve categories',
+            error: error.message
+        });
+    }
+    break;
+
                 
 
             case 'group category':
