@@ -18,11 +18,12 @@ exports.addReceiptEntry = async (req, res) => {
             payment_mode,
             selected_bank,
             user_id,
-            book_id
+            book_id,
+            status // <-- NEW FIELD (credit or debit)
         } = req.body;
 
         // Check required fields
-        if (!receipt_type || !amount || !party_id || !payment_mode || !user_id || !book_id || !category_split) {
+        if (!receipt_type || !amount || !party_id || !payment_mode || !user_id || !book_id || !category_split || !status) {
             return res.status(400).json({
                 error: "Missing required fields",
                 missing: {
@@ -32,8 +33,16 @@ exports.addReceiptEntry = async (req, res) => {
                     payment_mode: !payment_mode,
                     user_id: !user_id,
                     book_id: !book_id,
-                    category_split: !category_split
+                    category_split: !category_split,
+                    status: !status
                 }
+            });
+        }
+
+        // Validate status value
+        if (!['credit', 'debit'].includes(status.toLowerCase())) {
+            return res.status(400).json({
+                error: "Invalid status value. Must be 'credit' or 'debit'."
             });
         }
 
@@ -44,17 +53,16 @@ exports.addReceiptEntry = async (req, res) => {
         const sql = `
             INSERT INTO receipt_entries 
             (receipt_no, receipt_type, amount, party_id, remark, category_split, 
-             customer_field_id, payment_mode, selected_bank, user_id, book_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+             customer_field_id, payment_mode, selected_bank, user_id, book_id, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         `;
 
-        // Stringify category_split to store in one column (if storing as JSON)
         const categoryJson = JSON.stringify(category_split);
 
         const [result] = await db.execute(sql, [
             receipt_no, receipt_type, amount, party_id, remark, 
             categoryJson, customer_field_id, payment_mode, 
-            selected_bank, user_id, book_id
+            selected_bank, user_id, book_id, status.toLowerCase()
         ]);
 
         res.status(201).json({
@@ -64,6 +72,7 @@ exports.addReceiptEntry = async (req, res) => {
             receipt_no,
             user_id,
             book_id,
+            status: status.toLowerCase(),
             date: new Date().toLocaleDateString('en-US', {
                 month: 'short', day: '2-digit', year: 'numeric'
             }),
@@ -79,6 +88,7 @@ exports.addReceiptEntry = async (req, res) => {
         });
     }
 };
+
 
 
 // 📌 Get all receipt entries (ASYNC/AWAIT)

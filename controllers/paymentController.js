@@ -17,11 +17,14 @@ exports.addpaymentEntry = async (req, res) => {
             customer_field,
             payment_mode,
             selected_bank,
-            user_id  // Added user_id
+            user_id,
+            book_id,
+            status,
+            custom_field_id
         } = req.body;
 
-        // Include user_id in validation
-        if (!receipt_type || !amount || !party || !payment_mode || !user_id) {
+        // Validate required fields
+        if (!receipt_type || !amount || !party || !payment_mode || !user_id || !book_id || !status) {
             return res.status(400).json({ 
                 error: "Missing required fields",
                 missing: {
@@ -29,40 +32,62 @@ exports.addpaymentEntry = async (req, res) => {
                     amount: !amount,
                     party: !party,
                     payment_mode: !payment_mode,
-                    user_id: !user_id
+                    user_id: !user_id,
+                    book_id: !book_id,
+                    status: !status
                 }
             });
         }
 
+        // Validate status value
+        if (!['credit', 'debit'].includes(status.toLowerCase())) {
+            return res.status(400).json({
+                error: "Invalid status value. Must be 'credit' or 'debit'."
+            });
+        }
+
+        // Stringify category_split if it exists
+        const categoryJson = category_split ? JSON.stringify(category_split) : null;
+
+        // Generate unique payment number
         const payment_no = generatePaymentNo();
+
+        // SQL query to insert data into payment_entries table
         const sql = `INSERT INTO payment_entries 
             (payment_no, receipt_type, amount, party, remark, category_split, 
-             customer_field, payment_mode, selected_bank, user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+             customer_field, payment_mode, selected_bank, user_id, book_id, status, custom_field_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`;
 
+        // Insert the new payment entry into the database
         const [result] = await db.execute(sql, [
             payment_no, receipt_type, amount, party, remark, 
-            category_split, customer_field, payment_mode, 
-            selected_bank, user_id
+            categoryJson, customer_field, payment_mode, 
+            selected_bank, user_id, book_id, status.toLowerCase(), custom_field_id || null
         ]);
 
+        // Send success response with payment details
         res.json({
             success: true, 
             message: "Payment entry added successfully",
             payment_id: result.insertId,
             payment_no: payment_no,
             user_id: user_id,
+            book_id: book_id,
+            status: status.toLowerCase(),
             date: new Date().toLocaleDateString(),
             time: new Date().toLocaleTimeString()
         });
 
     } catch (error) {
+        // Handle errors and send error response
         res.status(500).json({ 
             error: error.message,
-            sqlError: error.sqlMessage
+            sqlError: error.sqlMessage || null
         });
     }
 };
+
+
 
 // 📌 Get all payment entries (filtered by user_id)
 exports.getAllpayments = async (req, res) => {
