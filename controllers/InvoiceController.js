@@ -189,11 +189,12 @@ exports.addInvoice = async (req, res) => {
             user_id,
             book_id,
             bank_account_id,
-            gstin
+            gstin,
+            businessId
         } = req.body;
 
         // Validate required fields
-        if (!type || !customer_or_supplier || !invoice_date || !user_id || !Array.isArray(items) || items.length === 0 || !book_id || !bank_account_id) {
+        if (!type || !customer_or_supplier || !invoice_date || !user_id || !Array.isArray(items) || items.length === 0 || !book_id || !bank_account_id || !businessId) {
             return res.status(400).json({ 
                 error: "Missing required fields",
                 missing_fields: {
@@ -203,7 +204,8 @@ exports.addInvoice = async (req, res) => {
                     user_id: !user_id,
                     items: !items || items.length === 0,
                     book_id: !book_id,
-                    bank_account_id: !bank_account_id
+                    bank_account_id: !bank_account_id,
+                    businessId: !businessId
                 }
             });
         }
@@ -214,6 +216,13 @@ exports.addInvoice = async (req, res) => {
             return res.status(400).json({ error: "User not found" });
         }
         const { name, phone_number, email } = userResult[0];
+
+        // Fetch bank account details from the bank_accounts table
+        const [bankAccountResult] = await db.query('SELECT bank_name FROM bank_accounts WHERE id = ?', [bank_account_id]);
+        if (bankAccountResult.length === 0) {
+            return res.status(400).json({ error: "Bank account not found" });
+        }
+        const { bank_name } = bankAccountResult[0];
 
         // Fetch the last invoice number
         const [lastInvoice] = await db.query('SELECT InvoiceNo FROM invoices ORDER BY id DESC LIMIT 1');
@@ -245,12 +254,12 @@ exports.addInvoice = async (req, res) => {
                 `INSERT INTO invoices 
                     (type, customer_or_supplier, invoice_date, total_taxable, 
                      cgst, sgst, igst, total_amount, discount_amount, 
-                     percentage, round_off, user_id, book_id, bank_account_id, hsn_code, gstin, InvoiceNo)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     percentage, round_off, user_id, book_id, bank_account_id, hsn_code, gstin, InvoiceNo, business_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [type, customer_or_supplier, invoice_date, total_taxable, 
                  total_cgst, total_sgst, total_igst, total_amount,
                  discount_amount, percentage, round_off, 
-                 user_id, book_id, bank_account_id, hsn_code, gstin, newInvoiceNo]
+                 user_id, book_id, bank_account_id, hsn_code, gstin, newInvoiceNo, businessId]
             );
 
             const invoiceId = invoiceResult.insertId;
@@ -274,7 +283,7 @@ exports.addInvoice = async (req, res) => {
                 customer_or_supplier,
                 invoice_date,
                 mobile_number: phone_number,
-                bank_name: 'SBI', // Assuming bank_name is not fetched from the user table
+                bank_name: bank_name, // Use the fetched bank_name
                 items,
                 totals: {
                     taxable: total_taxable,
@@ -338,14 +347,143 @@ exports.downloadPDF = async (req, res) => {
 };
 
 // ✅ Get all invoices (filtered by user_id and optionally by type)
+// exports.getInvoices = async (req, res) => {
+//     try {
+//         const { 
+//             type, 
+//             user_id, 
+//             businessId,
+//             bookId,
+//             debug,
+//             start_date,
+//             end_date
+//         } = req.query;
+
+//         // Validate required parameters
+//         if (!user_id) {
+//             return res.status(400).json({ 
+//                 error: "user_id is required",
+//                 code: "USER_ID_REQUIRED"
+//             });
+//         }
+
+//         // OPTION 2: Separate queries with manual joining (more reliable)
+//         const getInvoicesSeparateQueries = async () => {
+//             // Get base invoices
+//             let invoiceSql = `SELECT * FROM invoices WHERE user_id = ?`;
+//             const invoiceParams = [user_id];
+            
+//             // Add businessId filter if provided
+//             if (businessId) {
+//                 invoiceSql += ` AND business_id = ?`;
+//                 invoiceParams.push(businessId);
+//             }
+            
+//             // Add bookId filter if provided (only if businessId is also provided)
+//             if (bookId && businessId) {
+//                 invoiceSql += ` AND book_id = ?`;
+//                 invoiceParams.push(bookId);
+//             }
+            
+//             if (type) {
+//                 invoiceSql += ` AND type = ?`;
+//                 invoiceParams.push(type);
+//             }
+            
+//             // Add date range filtering if provided
+//             if (start_date && end_date) {
+//                 invoiceSql += ` AND invoice_date BETWEEN ? AND ?`;
+//                 invoiceParams.push(start_date, end_date);
+//             } else if (start_date) {
+//                 invoiceSql += ` AND invoice_date >= ?`;
+//                 invoiceParams.push(start_date);
+//             } else if (end_date) {
+//                 invoiceSql += ` AND invoice_date <= ?`;
+//                 invoiceParams.push(end_date);
+//             }
+            
+//             invoiceSql += ` ORDER BY invoice_date DESC`;
+            
+//             const [invoices] = await db.query(invoiceSql, invoiceParams);
+
+//             // Return early if no invoices found
+//             if (invoices.length === 0) {
+//                 return [];
+//             }
+
+//             // Get all items for these invoices
+//             const [items] = await db.query(
+//                 `SELECT * FROM invoice_items WHERE invoice_id IN (?)`,
+//                 [invoices.map(i => i.id)]
+//             );
+
+//             // Group items by invoice_id
+//             const itemsMap = items.reduce((map, item) => {
+//                 if (!map[item.invoice_id]) map[item.invoice_id] = [];
+//                 map[item.invoice_id].push({
+//                     item_name: item.item_name,
+//                     taxable_amount: item.taxable_amount,
+//                     remark: item.remark,
+//                     hsn_code: item.hsn_code,
+//                     quantity_unit: item.quantity_unit,
+//                     rate_per_unit: item.rate_per_unit,
+//                     tax_rate: item.tax_rate
+//                 });
+//                 return map;
+//             }, {});
+
+//             // Combine invoices with their items
+//             return invoices.map(invoice => ({
+//                 ...invoice,
+//                 items: itemsMap[invoice.id] || []
+//             }));
+//         };
+
+//         const invoices = await getInvoicesSeparateQueries();
+
+//         // Debug information if requested
+//         const debugInfo = debug ? {
+//             query_used: 'separate',
+//             filters: {
+//                 type,
+//                 businessId: businessId || 'not provided',
+//                 bookId: bookId || 'not provided',
+//                 date_range: start_date || end_date ? 
+//                     `${start_date || '...'} to ${end_date || '...'}` : 'none'
+//             },
+//             stats: {
+//                 invoice_count: invoices.length,
+//                 items_count: invoices.reduce((sum, inv) => sum + inv.items.length, 0)
+//             }
+//         } : undefined;
+
+//         res.status(200).json({ 
+//             success: true,
+//             invoices,
+//             count: invoices.length,
+//             user_id,
+//             ...(debugInfo && { debug: debugInfo })
+//         });
+
+//     } catch (error) {
+//         console.error("Error fetching invoices:", error);
+//         res.status(500).json({ 
+//             success: false,
+//             error: error.message,
+//             code: "INVOICE_FETCH_FAILED",
+//             details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+//         });
+//     }
+// };
 exports.getInvoices = async (req, res) => {
     try {
         const { 
             type, 
             user_id, 
-            debug,
-            start_date,  // New parameter
-            end_date     // New parameter
+            business_id,
+            book_id,
+            start_date,
+            end_date
         } = req.query;
 
         // Validate required parameters
@@ -362,9 +500,22 @@ exports.getInvoices = async (req, res) => {
             let invoiceSql = `SELECT * FROM invoices WHERE user_id = ?`;
             const invoiceParams = [user_id];
             
+            // Add type filter if provided
             if (type) {
                 invoiceSql += ` AND type = ?`;
                 invoiceParams.push(type);
+            }
+            
+            // Add business_id filter if provided
+            if (business_id) {
+                invoiceSql += ` AND business_id = ?`;
+                invoiceParams.push(business_id);
+            }
+            
+            // Add book_id filter if provided
+            if (book_id) {
+                invoiceSql += ` AND book_id = ?`;
+                invoiceParams.push(book_id);
             }
             
             // Add date range filtering if provided
@@ -418,26 +569,11 @@ exports.getInvoices = async (req, res) => {
 
         const invoices = await getInvoicesSeparateQueries();
 
-        // Debug information if requested
-        const debugInfo = debug ? {
-            query_used: 'separate',
-            filters: {
-                type,
-                date_range: start_date || end_date ? 
-                    `${start_date || '...'} to ${end_date || '...'}` : 'none'
-            },
-            stats: {
-                invoice_count: invoices.length,
-                items_count: invoices.reduce((sum, inv) => sum + inv.items.length, 0)
-            }
-        } : undefined;
-
         res.status(200).json({ 
             success: true,
             invoices,
             count: invoices.length,
-            user_id,
-            ...(debugInfo && { debug: debugInfo })
+            user_id
         });
 
     } catch (error) {
