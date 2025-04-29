@@ -104,7 +104,7 @@ const generateInvoicePDF = (invoiceData, filePath) => {
         const regular = 'Helvetica';
 
         // Load images
-        const logoPath = path.join(__dirname, '..', 'uploads', 'logo.jpeg');
+        const logoPath = path.join(__dirname, '..', 'uploads', 'LOGO_LEDGER BOOK-1.png');
         const avatarPath = path.join(__dirname, '..', 'uploads', 'avatar.jpeg'); // placeholder for round image
 
         // Header
