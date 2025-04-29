@@ -475,6 +475,7 @@ exports.downloadPDF = async (req, res) => {
 //         });
 //     }
 // };
+
 exports.getInvoices = async (req, res) => {
     try {
         const { 
@@ -586,6 +587,8 @@ exports.getInvoices = async (req, res) => {
         });
     }
 };
+
+// ✅ Get single invoice details (with user verification)
 // ✅ Get single invoice details (with user verification)
 exports.getInvoiceById = async (req, res) => {
     try {
@@ -618,10 +621,46 @@ exports.getInvoiceById = async (req, res) => {
             [id, user_id]
         );
 
+        // Generate PDF file path and check if exists
+        const filePath = path.join(pdfsDir, `invoice_${id}.pdf`);
+        const pdfExists = fs.existsSync(filePath);
+        
+        // Create download link if PDF exists
+        const downloadLink = pdfExists ? `/download/invoice_${id}.pdf` : null;
+
+        // If PDF doesn't exist, you might want to generate it here
+        if (!pdfExists) {
+            try {
+                // Prepare invoice data for PDF generation
+                const invoiceData = {
+                    ...invoice[0],
+                    items,
+                    totals: {
+                        taxable: invoice[0].total_taxable,
+                        cgst: invoice[0].cgst,
+                        sgst: invoice[0].sgst,
+                        igst: invoice[0].igst,
+                        discount: invoice[0].discount_amount,
+                        round_off: invoice[0].round_off,
+                        grand_total: invoice[0].total_amount
+                    }
+                };
+
+                // Generate the PDF
+                await generateInvoicePDF(invoiceData, filePath);
+                downloadLink = `/download/invoice_${id}.pdf`;
+            } catch (pdfError) {
+                console.error("Error generating PDF:", pdfError);
+                // Continue without failing the request
+            }
+        }
+
         res.status(200).json({ 
             invoice: invoice[0], 
             items,
-            user_id
+            user_id,
+            downloadLink, // Include the download link in the response
+            pdfExists: !!downloadLink // Whether PDF is available
         });
 
     } catch (error) {
