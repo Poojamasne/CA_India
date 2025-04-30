@@ -69,8 +69,11 @@ exports.getAllpartys = async (req, res) => {
         }
 
         const [results] = await db.execute(
-            "SELECT * FROM parties WHERE user_id = ? AND book_id = ?", 
-            [user_id, book_id]
+            `SELECT p.*, b.net_balance 
+             FROM parties p
+             JOIN books b ON p.book_id = b.book_id 
+             WHERE p.user_id = ? AND p.book_id = ? AND b.user_id = ?`, 
+            [user_id, book_id, user_id]  // Notice third parameter
         );
 
         res.json({
@@ -86,7 +89,6 @@ exports.getAllpartys = async (req, res) => {
         });
     }
 };
-
 
 // Update a party
 exports.updatepartyEntry = async (req, res) => {
