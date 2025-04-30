@@ -104,6 +104,63 @@ exports.deleteItem = async (req, res) => {
 };
 
 // ✅ GET: Get Items by user_id and book_id
+// exports.getItemsByUserAndBook = async (req, res) => {
+//     try {
+//         const { user_id, book_id } = req.query;
+
+//         // 1. Check if parameters exist
+//         if (!user_id || !book_id) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "Both `user_id` and `book_id` are required.",
+//             });
+//         }
+
+//         // 2. Check if user exists
+//         const [[user]] = await db.query("SELECT id FROM users WHERE id = ?", [user_id]);
+//         if (!user) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "User not found.",
+//             });
+//         }
+
+//         // 3. Check if book exists (and belongs to user)
+//         const [[book]] = await db.query(
+//             "SELECT book_id FROM books WHERE book_id = ? AND user_id = ?",
+//             [book_id, user_id]
+//         );
+//         if (!book) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "Book not found or does not belong to this user.",
+//             });
+//         }
+
+//         // 4. Fetch items
+//         const [items] = await db.query(
+//             `SELECT * FROM items WHERE user_id = ? AND book_id = ?`,
+//             [user_id, book_id]
+//         );
+
+//         // 5. Return items (even if empty)
+//         return res.status(200).json({
+//             success: true,
+//             count: items.length,
+//             items,
+//         });
+
+//     } catch (err) {
+//         console.error("Error:", err);
+//         return res.status(500).json({
+//             success: false,
+//             message: "Server error while fetching items.",
+//             error: err.message,
+//         });
+//     }
+// };
+
+
 exports.getItemsByUserAndBook = async (req, res) => {
     try {
         const { user_id, book_id } = req.query;
@@ -117,8 +174,8 @@ exports.getItemsByUserAndBook = async (req, res) => {
         }
 
         // 2. Check if user exists
-        const [[user]] = await db.query("SELECT id FROM users WHERE id = ?", [user_id]);
-        if (!user) {
+        const [userResult] = await db.query("SELECT id FROM users WHERE id = ?", [user_id]);
+        if (userResult.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: "User not found.",
@@ -126,11 +183,11 @@ exports.getItemsByUserAndBook = async (req, res) => {
         }
 
         // 3. Check if book exists (and belongs to user)
-        const [[book]] = await db.query(
+        const [bookResult] = await db.query(
             "SELECT book_id FROM books WHERE book_id = ? AND user_id = ?",
             [book_id, user_id]
         );
-        if (!book) {
+        if (bookResult.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: "Book not found or does not belong to this user.",
@@ -138,16 +195,48 @@ exports.getItemsByUserAndBook = async (req, res) => {
         }
 
         // 4. Fetch items
-        const [items] = await db.query(
+        const [itemsResult] = await db.query(
             `SELECT * FROM items WHERE user_id = ? AND book_id = ?`,
             [user_id, book_id]
         );
 
-        // 5. Return items (even if empty)
+        // 5. Calculate the required fields for each item
+        const itemsWithStocks = await Promise.all(
+            itemsResult.map(async (item) => {
+                const openingStock = item.opening_stock;
+
+                // Calculate Inward Register (Purchase)
+                const [purchasesResult] = await db.query(
+                    `SELECT COALESCE(SUM(quantity), 0) AS total_quantity FROM purchases WHERE item_id = ? AND user_id = ? AND book_id = ?`,
+                    [item.id, user_id, book_id]
+                );
+                const inwardRegister = purchasesResult[0].total_quantity;
+
+                // Calculate Outward Register (Sale)
+                const [salesResult] = await db.query(
+                    `SELECT COALESCE(SUM(quantity), 0) AS total_quantity FROM sales WHERE item_id = ? AND user_id = ? AND book_id = ?`,
+                    [item.id, user_id, book_id]
+                );
+                const outwardRegister = salesResult[0].total_quantity;
+
+                // Calculate Closing Stock
+                const closingStock = openingStock + inwardRegister - outwardRegister;
+
+                return {
+                    ...item,
+                    opening_stock: openingStock,
+                    inward_register: inwardRegister,
+                    outward_register: outwardRegister,
+                    closing_stock: closingStock,
+                };
+            })
+        );
+
+        // 6. Return items with calculated fields (even if empty)
         return res.status(200).json({
             success: true,
-            count: items.length,
-            items,
+            count: itemsWithStocks.length,
+            items: itemsWithStocks,
         });
 
     } catch (err) {
@@ -159,5 +248,3 @@ exports.getItemsByUserAndBook = async (req, res) => {
         });
     }
 };
-
-
