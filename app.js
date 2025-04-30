@@ -54,7 +54,6 @@ app.use('/download', express.static(pdfsDir));
 // Then dynamic routes
 app.use('/download', InvoiceDetailRoutes);
 
-
 // Routes
 app.use('/api/filter-flow', filterFlowRoutes);
 

@@ -3,6 +3,7 @@ const moment = require('moment');
 const PDFDocument = require('pdfkit');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
+const ExcelJS = require('exceljs');
 
 // Cache for storing filtered results temporarily
 const filterCache = new Map();
@@ -327,14 +328,16 @@ const filterEntryFlow = async (req, res) => {
             filterCache.delete(filterId);
         }, 3600000);
 
-        // Create download link
+        // Create download links
         const downloadPdfLink = `${req.protocol}://${req.get('host')}/api/filter-flow/download/${filterId}`;
+        const downloadExcelLink = `${req.protocol}://${req.get('host')}/api/filter-flow/download-excel/${filterId}`;
 
         res.json({
             success: true,
             count: results.length,
             entries: results,
-            downloadPdfLink: downloadPdfLink
+            downloadPdfLink: downloadPdfLink,
+            downloadExcelLink: downloadExcelLink
         });
 
     } catch (error) {
@@ -565,6 +568,60 @@ const downloadFilteredPdf = async (req, res) => {
         });
     }
 };
+
+// const downloadFilteredExcel = async (req, res) => {
+//     try {
+//         const { filterId } = req.params;
+        
+//         if (!filterCache.has(filterId)) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Filtered results not found or expired'
+//             });
+//         }
+
+//         const cacheData = filterCache.get(filterId);
+//         const filteredData = cacheData.data;
+//         const filters = cacheData.filters;
+//         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+//         // Create a new workbook
+//         const workbook = new ExcelJS.Workbook();
+//         const worksheet = workbook.addWorksheet('Entries Report');
+
+//         // Add headers
+//         const headers = ['Receipt No', 'Date', 'Party', 'Amount', 'Payment Mode', 'Status'];
+//         worksheet.addRow(headers);
+
+//         // Add data rows
+//         filteredData.forEach(entry => {
+//             const row = [
+//                 entry.receipt_no || '-',
+//                 entry.created_at ? moment(entry.created_at).format('DD/MM/YYYY') : '-',
+//                 entry.party || '-',
+//                 entry.amount || 0,
+//                 entry.payment_mode || '-',
+//                 entry.status || '-'
+//             ];
+//             worksheet.addRow(row);
+//         });
+
+//         // Set response headers
+//         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+//         res.setHeader('Content-Disposition', `attachment; filename=entries-report-${timestamp}.xlsx`);
+
+//         // Write the workbook to the response
+//         await workbook.xlsx.write(res);
+//         res.end();
+//     } catch (error) {
+//         console.error('Error generating Excel:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Error generating Excel',
+//             error: error.message
+//         });
+//     }
+// };
 
 // async function handleFieldOptions(req, res) {
 //     const { user_id, entryType, dateFilter, CustomDate, startDate, endDate, Field, party_id, category_id ,
@@ -1072,6 +1129,317 @@ const downloadFilteredPdf = async (req, res) => {
 //     });
 // }
 
+// async function handleFieldOptions(req, res) {
+//     const { user_id, entryType, dateFilter, CustomDate, startDate, endDate, Field, party_id, category_id,
+//           category_group_id, head_account_id, payment_mode, custom_field_id, Referencer_id, grade_id } = req.query;
+
+//     if (!Field) {
+//         return res.status(400).json({ message: "Field parameter is required" });
+//     }
+
+//     let table = 'receipt_entries';
+//     if (entryType) {
+//         const lowerEntryType = entryType.toLowerCase();
+//         switch (lowerEntryType) {
+//             case 'receipt': table = 'receipt_entries'; break;
+//             case 'payment': table = 'payment_entries'; break;
+//             case 'transfer': table = 'transfers'; break;
+//             default:
+//                 return res.status(400).json({ message: "Invalid entryType. Must be receipt, payment, or transfer" });
+//         }
+//     }
+
+//     let params = [];
+//     let fieldQuery = '';
+
+//     const applyDateFilter = (baseQuery, dateColumn = 'created_at') => {
+//         let filteredQuery = baseQuery;
+//         const normalizedDateFilter = (dateFilter || '').toLowerCase();
+
+//         if (normalizedDateFilter === 'customdate' && CustomDate) {
+//             filteredQuery += ` AND DATE(${dateColumn}) = ?`;
+//             params.push(CustomDate);
+//         } else if (normalizedDateFilter === 'customperiod' && startDate && endDate) {
+//             filteredQuery += ` AND DATE(${dateColumn}) BETWEEN ? AND ?`;
+//             params.push(startDate, endDate);
+//         } else if (normalizedDateFilter === 'currentmonth') {
+//             filteredQuery += ` AND YEAR(${dateColumn}) = YEAR(CURRENT_DATE) AND MONTH(${dateColumn}) = MONTH(CURRENT_DATE)`;
+//         } else if (normalizedDateFilter === 'lastmonth') {
+//             filteredQuery += ` AND YEAR(${dateColumn}) = YEAR(CURRENT_DATE - INTERVAL 1 MONTH) 
+//                                AND MONTH(${dateColumn}) = MONTH(CURRENT_DATE - INTERVAL 1 MONTH)`;
+//         } else if (normalizedDateFilter === 'currentfinanceyear') {
+//             const currentYear = moment().year();
+//             const currentMonth = moment().month() + 1;
+//             const fyStart = currentMonth >= 4 ? `${currentYear}-04-01` : `${currentYear - 1}-04-01`;
+//             const fyEnd = currentMonth >= 4 ? `${currentYear + 1}-03-31` : `${currentYear}-03-31`;
+//             filteredQuery += ` AND DATE(${dateColumn}) BETWEEN ? AND ?`;
+//             params.push(fyStart, fyEnd);
+//         } else if (normalizedDateFilter === 'lastfinanceyear') {
+//             const lastFyYear = moment().year();
+//             const lastFyMonth = moment().month() + 1;
+//             const lastFyStart = lastFyMonth >= 4 ? `${lastFyYear - 1}-04-01` : `${lastFyYear - 2}-04-01`;
+//             const lastFyEnd = lastFyMonth >= 4 ? `${lastFyYear}-03-31` : `${lastFyYear - 1}-03-31`;
+//             filteredQuery += ` AND DATE(${dateColumn}) BETWEEN ? AND ?`;
+//             params.push(lastFyStart, lastFyEnd);
+//         }
+
+//         return filteredQuery;
+//     };
+
+//     switch (Field.toLowerCase()) {
+//         case 'party':
+//             if (party_id) {
+//                 fieldQuery = `
+//                     SELECT id, party
+//                     FROM parties
+//                     WHERE user_id = ? AND id = ?
+//                     LIMIT 1
+//                 `;
+//                 params.push(user_id, party_id);
+//             } else {
+//                 fieldQuery = `
+//                     SELECT DISTINCT id, party
+//                     FROM parties
+//                     WHERE user_id = ?
+//                 `;
+//                 params.push(user_id);
+//                 fieldQuery = applyDateFilter(fieldQuery);
+//                 fieldQuery += ` ORDER BY party ASC`;
+//             }
+//             break;
+
+//         case 'referencer':
+//             if (Referencer_id) {
+//                 fieldQuery = `
+//                     SELECT id, referencer AS name 
+//                     FROM book_referencers 
+//                     WHERE user_id = ? AND id = ?
+//                     LIMIT 1
+//                 `;
+//                 params.push(user_id, Referencer_id);
+//             } else {
+//                 fieldQuery = `
+//                     SELECT id, referencer AS name 
+//                     FROM book_referencers 
+//                     WHERE user_id = ?
+//                 `;
+//                 params.push(user_id);
+//                 fieldQuery = applyDateFilter(fieldQuery);
+//                 fieldQuery += ` ORDER BY referencer ASC`;
+//             }
+//             break;
+
+//         case 'category':
+//             if (category_id) {
+//                 fieldQuery = `
+//                     SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id 
+//                     FROM categories 
+//                     WHERE user_id = ? AND id = ?
+//                     LIMIT 1
+//                 `;
+//                 params.push(user_id, category_id);
+//             } else {
+//                 fieldQuery = `
+//                     SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id 
+//                     FROM categories 
+//                     WHERE user_id = ?
+//                 `;
+//                 params.push(user_id);
+//                 fieldQuery = applyDateFilter(fieldQuery);
+//                 fieldQuery += ` ORDER BY category_name ASC`;
+//             }
+//             break;
+
+//         case 'group category':
+//             if (category_group_id) {
+//                 fieldQuery = `
+//                     SELECT id, group_name 
+//                     FROM category_groups 
+//                     WHERE user_id = ? AND id = ?
+//                     LIMIT 1
+//                 `;
+//                 params.push(user_id, category_group_id);
+//             } else {
+//                 fieldQuery = `
+//                     SELECT id, group_name 
+//                     FROM category_groups 
+//                     WHERE user_id = ?
+//                 `;
+//                 params.push(user_id);
+//                 fieldQuery = applyDateFilter(fieldQuery);
+//                 fieldQuery += ` ORDER BY group_name ASC`;
+//             }
+//             break;
+
+//         case 'head account':
+//             if (head_account_id) {
+//                 fieldQuery = `
+//                     SELECT id, name 
+//                     FROM head_accounts 
+//                     WHERE user_id = ? AND id = ?
+//                     LIMIT 1
+//                 `;
+//                 params.push(user_id, head_account_id);
+//             } else {
+//                 fieldQuery = `
+//                     SELECT id, name 
+//                     FROM head_accounts 
+//                     WHERE user_id = ?
+//                 `;
+//                 params.push(user_id);
+//                 fieldQuery = applyDateFilter(fieldQuery);
+//                 fieldQuery += ` ORDER BY name ASC`;
+//             }
+//             break;
+
+//         case 'payment mode':
+//             if (payment_mode) {
+//                 fieldQuery = `
+//                     SELECT DISTINCT id, payment_mode AS name 
+//                     FROM ${table} 
+//                     WHERE user_id = ? AND payment_mode = ?
+//                 `;
+//                 params.push(user_id, payment_mode);
+//             } else {
+//                 fieldQuery = `
+//                     SELECT DISTINCT id, payment_mode AS name 
+//                     FROM ${table} 
+//                     WHERE user_id = ?
+//                 `;
+//                 params.push(user_id);
+//                 fieldQuery = applyDateFilter(fieldQuery);
+//                 fieldQuery += ` ORDER BY payment_mode ASC`;
+//             }
+//             break;
+
+//         case 'grade':
+//             if (grade_id) {
+//                 fieldQuery = `
+//                     SELECT DISTINCT p.grade AS name, p.id AS sort_id
+//                     FROM parties p
+//                     WHERE p.user_id = ? AND p.id = ?
+//                 `;
+//                 params.push(user_id, grade_id);
+//             } else {
+//                 fieldQuery = `
+//                     SELECT DISTINCT p.grade AS name, p.id AS sort_id
+//                     FROM parties p
+//                     WHERE p.user_id = ?
+//                 `;
+//                 params.push(user_id);
+//                 fieldQuery = applyDateFilter(fieldQuery, 'p.created_at');
+//                 fieldQuery += ` ORDER BY sort_id ASC, name ASC`;
+//             }
+//             break;
+
+//         case 'custom field':
+//             if (custom_field_id) {
+//                 fieldQuery = `
+//                     SELECT id, field_name AS name 
+//                     FROM customer_fields 
+//                     WHERE user_id = ? AND id = ?
+//                 `;
+//                 params.push(user_id, custom_field_id);
+//             } else {
+//                 fieldQuery = `
+//                     SELECT id, field_name AS name 
+//                     FROM customer_fields 
+//                     WHERE user_id = ?
+//                 `;
+//                 params.push(user_id);
+//             }
+//             fieldQuery = applyDateFilter(fieldQuery);
+//             fieldQuery += ` ORDER BY field_name ASC`;
+//             break;
+
+//         default:
+//             return res.status(400).json({ message: "Invalid Field parameter" });
+//     }
+
+//     console.log('Field query:', fieldQuery);
+//     console.log('Field params:', params);
+
+//     try {
+//         const [results] = await db.query(fieldQuery, params);
+
+//         // For category field, only return id and category_name
+//         if (Field.toLowerCase() === 'category') {
+//             const filteredResults = results.map(item => ({
+//                 id: item.id,
+//                 category_name: item.category_name
+//             }));
+//             return res.json({
+//                 success: true,
+//                 field: Field,
+//                 options: filteredResults
+//             });
+//         }
+
+//         return res.json({
+//             success: true,
+//             field: Field,
+//             options: results
+//         });
+//     } catch (error) {
+//         console.error('Database error:', error);
+//         return res.status(500).json({
+//             success: false,
+//             message: `Failed to retrieve ${Field}`,
+//             error: error.message
+//         });
+//     }
+// }
+
+const downloadFilteredExcel = async (req, res) => {
+    try {
+        const { filterId } = req.params;
+        
+        if (!filterCache.has(filterId)) {
+            return res.status(404).json({
+                success: false,
+                message: 'Filtered results not found or expired'
+            });
+        }
+
+        const cacheData = filterCache.get(filterId);
+        const filteredData = cacheData.data;
+        const filters = cacheData.filters;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+        // Create a new workbook
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Entries Report');
+
+        // Dynamically generate headers based on the first entry's keys
+        const headers = Object.keys(filteredData[0] || {}).map(key => key.replace(/_/g, ' '));
+        worksheet.addRow(headers);
+
+        // Add data rows
+        filteredData.forEach(entry => {
+            const row = headers.map(header => {
+                const key = header.replace(/ /g, '_');
+                return entry[key] || '-';
+            });
+            worksheet.addRow(row);
+        });
+
+        // Set response headers
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=entries-report-${timestamp}.xlsx`);
+
+        // Write the workbook to the response
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (error) {
+        console.error('Error generating Excel:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error generating Excel',
+            error: error.message
+        });
+    }
+};
+
 async function handleFieldOptions(req, res) {
     const { user_id, entryType, dateFilter, CustomDate, startDate, endDate, Field, party_id, category_id,
           category_group_id, head_account_id, payment_mode, custom_field_id, Referencer_id, grade_id } = req.query;
@@ -1305,6 +1673,22 @@ async function handleFieldOptions(req, res) {
     try {
         const [results] = await db.query(fieldQuery, params);
 
+        // Generate a unique filter ID and cache the results
+        const filterId = uuidv4();
+        filterCache.set(filterId, {
+            data: results,
+            timestamp: Date.now(),
+            filters: req.query
+        });
+
+        // Set cache expiration (1 hour)
+        setTimeout(() => {
+            filterCache.delete(filterId);
+        }, 3600000);
+
+        // Create download links
+        const downloadExcelLink = `${req.protocol}://${req.get('host')}/api/filter-flow/download-excel/${filterId}`;
+
         // For category field, only return id and category_name
         if (Field.toLowerCase() === 'category') {
             const filteredResults = results.map(item => ({
@@ -1314,14 +1698,16 @@ async function handleFieldOptions(req, res) {
             return res.json({
                 success: true,
                 field: Field,
-                options: filteredResults
+                options: filteredResults,
+                downloadExcelLink: downloadExcelLink
             });
         }
 
         return res.json({
             success: true,
             field: Field,
-            options: results
+            options: results,
+            downloadExcelLink: downloadExcelLink
         });
     } catch (error) {
         console.error('Database error:', error);
@@ -1336,6 +1722,7 @@ async function handleFieldOptions(req, res) {
 module.exports = {
     filterEntryFlow,
     downloadFilteredPdf,
+    downloadFilteredExcel,
     handleFieldOptions
 };
 
