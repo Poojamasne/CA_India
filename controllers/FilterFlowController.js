@@ -323,38 +323,6 @@ const filterEntryFlow = async (req, res) => {
 
         const [results] = await db.query(query, params);
 
-        // Calculate cashIn and cashOut for each party
-        const partyIds = party_id.split(',').map(id => id.trim());
-        const cashFlowPromises = partyIds.map(async (partyId) => {
-            const cashInQuery = `
-                SELECT SUM(amount) AS total
-                FROM receipt_entries
-                WHERE user_id = ? AND party_id = ? AND DATE(created_at) = ?
-            `;
-            const cashOutQuery = `
-                SELECT SUM(amount) AS total
-                FROM payment_entries
-                WHERE user_id = ? AND party_id = ? AND DATE(created_at) = ?
-            `;
-
-            const [cashInResults] = await db.query(cashInQuery, [user_id, partyId, CustomDate]);
-            const cashIn = cashInResults[0].total || 0;
-
-            const [cashOutResults] = await db.query(cashOutQuery, [user_id, partyId, CustomDate]);
-            const cashOut = cashOutResults[0].total || 0;
-
-            const balance = cashIn - cashOut;
-
-            return {
-                id: partyId,
-                cashIn: cashIn,
-                cashOut: cashOut,
-                balance: balance
-            };
-        });
-
-        const cashFlowResults = await Promise.all(cashFlowPromises);
-
         // Generate a unique filter ID and cache the results
         const filterId = uuidv4();
         filterCache.set(filterId, {
@@ -376,7 +344,6 @@ const filterEntryFlow = async (req, res) => {
             success: true,
             count: results.length,
             entries: results,
-            cashFlow: cashFlowResults,
             downloadPdfLink: downloadPdfLink,
             downloadExcelLink: downloadExcelLink
         });

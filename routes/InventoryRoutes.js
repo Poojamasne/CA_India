@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const InventoryController = require('../controllers/InventoryController');
-const verifyToken = require('../middleware/auth'); // Ensure the path is correct
-const roleMiddleware = require('../middlewares/roleMiddleware');
+const inventoryController = require('../controllers/InventoryController');
 
+// Inventory Report - All Items Summary
+router.get('/all-items', inventoryController.getAllItemsInventoryReport);
 
-router.get('/inventory/report', verifyToken,roleMiddleware(['admin', 'accountant']), InventoryController.generateInventoryReport);
+// Inventory Report - Item Wise Detailed Transactions
+router.get('/item-wise', inventoryController.getItemWiseInventoryReport);
 
+// Inventory Report - Detailed Transactions (All Items)
+router.get('/detailed', inventoryController.getDetailedInventoryReport);
 
 module.exports = router;
-
-
