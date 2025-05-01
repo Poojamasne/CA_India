@@ -304,8 +304,16 @@ const filterEntryFlow = async (req, res) => {
 
         // Party Filter
         if (party_id) {
-            query += ` AND party_id = ?`;
-            params.push(party_id);
+            const partyIds = party_id.split(',').map(id => id.trim());
+            query += ` AND party_id IN (${partyIds.map(() => '?').join(', ')})`;
+            params.push(...partyIds);
+        }
+
+        // Category Filter
+        if (category) {
+            const categories = category.split(',').map(cat => cat.trim());
+            query += ` AND category IN (${categories.map(() => '?').join(', ')})`;
+            params.push(...categories);
         }
 
         query += ` ORDER BY created_at DESC`;
@@ -314,6 +322,38 @@ const filterEntryFlow = async (req, res) => {
         console.log('With parameters:', params);
 
         const [results] = await db.query(query, params);
+
+        // Calculate cashIn and cashOut for each party
+        const partyIds = party_id.split(',').map(id => id.trim());
+        const cashFlowPromises = partyIds.map(async (partyId) => {
+            const cashInQuery = `
+                SELECT SUM(amount) AS total
+                FROM receipt_entries
+                WHERE user_id = ? AND party_id = ? AND DATE(created_at) = ?
+            `;
+            const cashOutQuery = `
+                SELECT SUM(amount) AS total
+                FROM payment_entries
+                WHERE user_id = ? AND party_id = ? AND DATE(created_at) = ?
+            `;
+
+            const [cashInResults] = await db.query(cashInQuery, [user_id, partyId, CustomDate]);
+            const cashIn = cashInResults[0].total || 0;
+
+            const [cashOutResults] = await db.query(cashOutQuery, [user_id, partyId, CustomDate]);
+            const cashOut = cashOutResults[0].total || 0;
+
+            const balance = cashIn - cashOut;
+
+            return {
+                id: partyId,
+                cashIn: cashIn,
+                cashOut: cashOut,
+                balance: balance
+            };
+        });
+
+        const cashFlowResults = await Promise.all(cashFlowPromises);
 
         // Generate a unique filter ID and cache the results
         const filterId = uuidv4();
@@ -336,6 +376,7 @@ const filterEntryFlow = async (req, res) => {
             success: true,
             count: results.length,
             entries: results,
+            cashFlow: cashFlowResults,
             downloadPdfLink: downloadPdfLink,
             downloadExcelLink: downloadExcelLink
         });
@@ -1500,13 +1541,13 @@ async function handleFieldOptions(req, res) {
     switch (Field.toLowerCase()) {
         case 'party':
             if (party_id) {
+                const partyIds = party_id.split(',').map(id => id.trim());
                 fieldQuery = `
                     SELECT id, party
                     FROM parties
-                    WHERE user_id = ? AND id = ?
-                    LIMIT 1
+                    WHERE user_id = ? AND id IN (${partyIds.map(() => '?').join(', ')})
                 `;
-                params.push(user_id, party_id);
+                params.push(user_id, ...partyIds);
             } else {
                 fieldQuery = `
                     SELECT DISTINCT id, party
@@ -1521,13 +1562,13 @@ async function handleFieldOptions(req, res) {
 
         case 'referencer':
             if (Referencer_id) {
+                const referencerIds = Referencer_id.split(',').map(id => id.trim());
                 fieldQuery = `
                     SELECT id, referencer AS name 
                     FROM book_referencers 
-                    WHERE user_id = ? AND id = ?
-                    LIMIT 1
+                    WHERE user_id = ? AND id IN (${referencerIds.map(() => '?').join(', ')})
                 `;
-                params.push(user_id, Referencer_id);
+                params.push(user_id, ...referencerIds);
             } else {
                 fieldQuery = `
                     SELECT id, referencer AS name 
@@ -1542,13 +1583,13 @@ async function handleFieldOptions(req, res) {
 
         case 'category':
             if (category_id) {
+                const categoryIds = category_id.split(',').map(id => id.trim());
                 fieldQuery = `
                     SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id 
                     FROM categories 
-                    WHERE user_id = ? AND id = ?
-                    LIMIT 1
+                    WHERE user_id = ? AND id IN (${categoryIds.map(() => '?').join(', ')})
                 `;
-                params.push(user_id, category_id);
+                params.push(user_id, ...categoryIds);
             } else {
                 fieldQuery = `
                     SELECT id, category_name, amount, category_group, user_id, category_group_id, book_id 
@@ -1563,13 +1604,13 @@ async function handleFieldOptions(req, res) {
 
         case 'group category':
             if (category_group_id) {
+                const categoryGroupIds = category_group_id.split(',').map(id => id.trim());
                 fieldQuery = `
                     SELECT id, group_name 
                     FROM category_groups 
-                    WHERE user_id = ? AND id = ?
-                    LIMIT 1
+                    WHERE user_id = ? AND id IN (${categoryGroupIds.map(() => '?').join(', ')})
                 `;
-                params.push(user_id, category_group_id);
+                params.push(user_id, ...categoryGroupIds);
             } else {
                 fieldQuery = `
                     SELECT id, group_name 
@@ -1584,13 +1625,13 @@ async function handleFieldOptions(req, res) {
 
         case 'head account':
             if (head_account_id) {
+                const headAccountIds = head_account_id.split(',').map(id => id.trim());
                 fieldQuery = `
                     SELECT id, name 
                     FROM head_accounts 
-                    WHERE user_id = ? AND id = ?
-                    LIMIT 1
+                    WHERE user_id = ? AND id IN (${headAccountIds.map(() => '?').join(', ')})
                 `;
-                params.push(user_id, head_account_id);
+                params.push(user_id, ...headAccountIds);
             } else {
                 fieldQuery = `
                     SELECT id, name 
@@ -1605,12 +1646,13 @@ async function handleFieldOptions(req, res) {
 
         case 'payment mode':
             if (payment_mode) {
+                const paymentModes = payment_mode.split(',').map(mode => mode.trim());
                 fieldQuery = `
                     SELECT DISTINCT id, payment_mode AS name 
                     FROM ${table} 
-                    WHERE user_id = ? AND payment_mode = ?
+                    WHERE user_id = ? AND payment_mode IN (${paymentModes.map(() => '?').join(', ')})
                 `;
-                params.push(user_id, payment_mode);
+                params.push(user_id, ...paymentModes);
             } else {
                 fieldQuery = `
                     SELECT DISTINCT id, payment_mode AS name 
@@ -1625,12 +1667,13 @@ async function handleFieldOptions(req, res) {
 
         case 'grade':
             if (grade_id) {
+                const gradeIds = grade_id.split(',').map(id => id.trim());
                 fieldQuery = `
                     SELECT DISTINCT p.grade AS name, p.id AS sort_id
                     FROM parties p
-                    WHERE p.user_id = ? AND p.id = ?
+                    WHERE p.user_id = ? AND p.id IN (${gradeIds.map(() => '?').join(', ')})
                 `;
-                params.push(user_id, grade_id);
+                params.push(user_id, ...gradeIds);
             } else {
                 fieldQuery = `
                     SELECT DISTINCT p.grade AS name, p.id AS sort_id
@@ -1645,12 +1688,13 @@ async function handleFieldOptions(req, res) {
 
         case 'custom field':
             if (custom_field_id) {
+                const customFieldIds = custom_field_id.split(',').map(id => id.trim());
                 fieldQuery = `
                     SELECT id, field_name AS name 
                     FROM customer_fields 
-                    WHERE user_id = ? AND id = ?
+                    WHERE user_id = ? AND id IN (${customFieldIds.map(() => '?').join(', ')})
                 `;
-                params.push(user_id, custom_field_id);
+                params.push(user_id, ...customFieldIds);
             } else {
                 fieldQuery = `
                     SELECT id, field_name AS name 
