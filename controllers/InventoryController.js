@@ -27,6 +27,7 @@ exports.getInventoryReport = async (req, res) => {
                 ii.item_name,
                 ii.hsn_code,
                 ii.quantity_unit,
+                ii.quantity,  -- Quantity field from invoice_items
                 ii.tax_rate,
                 ii.taxable_amount,
                 inv.igst,
