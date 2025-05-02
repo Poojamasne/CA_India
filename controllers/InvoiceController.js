@@ -177,157 +177,181 @@ const generateInvoicePDF = (invoiceData, filePath) => {
 };
 
 exports.addInvoice = async (req, res) => {
-    try {
-        const { 
-            type, 
-            customer_or_supplier, 
-            invoice_date, 
-            discount_amount = 0.00, 
-            percentage = "0%", 
-            round_off = 0.00, 
-            items,
-            user_id,
-            book_id,
-            bank_account_id,
-            gstin,
-            businessId
-        } = req.body;
+  try {
+    const { 
+      type, 
+      customer_or_supplier, 
+      invoice_date, 
+      discount_amount = 0.00, 
+      percentage = "0%", 
+      round_off = 0.00, 
+      items,
+      user_id,
+      book_id,
+      bank_account_id,
+      gstin,
+      businessId
+    } = req.body;
 
-        // Validate required fields
-        if (!type || !customer_or_supplier || !invoice_date || !user_id || !Array.isArray(items) || items.length === 0 || !book_id || !bank_account_id || !businessId) {
-            return res.status(400).json({ 
-                error: "Missing required fields",
-                missing_fields: {
-                    type: !type,
-                    customer_or_supplier: !customer_or_supplier,
-                    invoice_date: !invoice_date,
-                    user_id: !user_id,
-                    items: !items || items.length === 0,
-                    book_id: !book_id,
-                    bank_account_id: !bank_account_id,
-                    businessId: !businessId
-                }
-            });
+    // 1) Basic validation
+    if (
+      !type || !customer_or_supplier || !invoice_date ||
+      !user_id || !Array.isArray(items) || items.length === 0 ||
+      !book_id || !bank_account_id || !businessId
+    ) {
+      return res.status(400).json({ 
+        error: "Missing required fields",
+        missing_fields: {
+          type: !type,
+          customer_or_supplier: !customer_or_supplier,
+          invoice_date: !invoice_date,
+          user_id: !user_id,
+          items: !items || items.length === 0,
+          book_id: !book_id,
+          bank_account_id: !bank_account_id,
+          businessId: !businessId
         }
-
-        // Fetch user details from the users table
-        const [userResult] = await db.query('SELECT name, phone_number, email FROM users WHERE id = ?', [user_id]);
-        if (userResult.length === 0) {
-            return res.status(400).json({ error: "User not found" });
-        }
-        const { name, phone_number, email } = userResult[0];
-
-        // Fetch bank account details from the bank_accounts table
-        const [bankAccountResult] = await db.query('SELECT bank_name FROM bank_accounts WHERE id = ?', [bank_account_id]);
-        if (bankAccountResult.length === 0) {
-            return res.status(400).json({ error: "Bank account not found" });
-        }
-        const { bank_name } = bankAccountResult[0];
-
-        // Fetch the last invoice number
-        const [lastInvoice] = await db.query('SELECT InvoiceNo FROM invoices ORDER BY id DESC LIMIT 1');
-        let newInvoiceNo;
-        if (lastInvoice.length > 0 && lastInvoice[0].InvoiceNo) {
-            const lastInvoiceNo = lastInvoice[0].InvoiceNo;
-            const lastNumber = parseInt(lastInvoiceNo.match(/\d+/)[0], 10);
-            newInvoiceNo = `INV${String(lastNumber + 1).padStart(5, '0')}`;
-        } else {
-            newInvoiceNo = 'INV00001';
-        }
-
-        // Calculate total values
-        let total_taxable = items.reduce((sum, item) => sum + parseFloat(item.taxable_amount || 0), 0);
-        let total_cgst = items.reduce((sum, item) => sum + (parseFloat(item.taxable_amount || 0) * (parseFloat(item.tax_rate || 0) / 2) / 100), 0);
-        let total_sgst = total_cgst;
-        let total_igst = 0.00; // Assuming IGST is not applicable in this case
-        let total_amount = total_taxable + total_cgst + total_sgst - discount_amount + round_off;
-
-        // Extract hsn_code from the first item (or handle it as needed)
-        const hsn_code = items[0]?.hsn_code || 'default_value';
-
-        const connection = await db.getConnection();
-        try {
-            await connection.beginTransaction();
-
-            // Insert invoice with calculated tax values
-            const [invoiceResult] = await connection.query(
-                `INSERT INTO invoices 
-                    (type, customer_or_supplier, invoice_date, total_taxable, 
-                     cgst, sgst, igst, total_amount, discount_amount, 
-                     percentage, round_off, user_id, book_id, bank_account_id, hsn_code, gstin, InvoiceNo, business_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [type, customer_or_supplier, invoice_date, total_taxable, 
-                 total_cgst, total_sgst, total_igst, total_amount,
-                 discount_amount, percentage, round_off, 
-                 user_id, book_id, bank_account_id, hsn_code, gstin, newInvoiceNo, businessId]
-            );
-
-            const invoiceId = invoiceResult.insertId;
-
-            // Insert invoice items
-            for (const item of items) {
-                await connection.query(
-                    `INSERT INTO invoice_items 
-                        (invoice_id, item_name, taxable_amount, remark, user_id, hsn_code, quantity_unit, rate_per_unit, tax_rate)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [invoiceId, item.item_name, item.taxable_amount, item.remark || '', user_id, item.hsn_code, item.quantity_unit, item.rate_per_unit, item.tax_rate]
-                );
-            }
-
-            await connection.commit();
-
-            // Generate and save PDF
-            const invoiceData = {
-                invoiceId,
-                type,
-                customer_or_supplier,
-                invoice_date,
-                mobile_number: phone_number,
-                bank_name: bank_name, // Use the fetched bank_name
-                items,
-                totals: {
-                    taxable: total_taxable,
-                    cgst: total_cgst,
-                    sgst: total_sgst,
-                    igst: total_igst,
-                    discount: discount_amount,
-                    round_off: round_off,
-                    grand_total: total_amount
-                },
-                user_id,
-                gstin,
-                InvoiceNo: newInvoiceNo // Add InvoiceNo to invoice data
-            };
-
-            const filePath = path.join(pdfsDir, `invoice_${invoiceId}.pdf`);
-            await generateInvoicePDF(invoiceData, filePath);
-
-            // Provide download link in the response
-            const downloadLink = `/download/invoice_${invoiceId}.pdf`;
-            res.status(200).json({
-                success: true,
-                message: "Invoice generated successfully",
-                downloadLink,
-                invoiceId,
-                InvoiceNo: newInvoiceNo // Include the generated InvoiceNo in the response
-            });
-
-        } catch (error) {
-            await connection.rollback();
-            throw error;
-        } finally {
-            connection.release();
-        }
-
-    } catch (error) {
-        console.error("Error adding invoice:", error);
-        res.status(500).json({ 
-            error: error.message || "Internal Server Error",
-            sqlError: error.sqlMessage,
-            code: "INVOICE_CREATION_FAILED"
-        });
+      });
     }
+
+    // 2) Fetch user & bank details
+    const [u] = await db.query(
+      'SELECT name, phone_number, email FROM users WHERE id = ?', 
+      [user_id]
+    );
+    if (u.length === 0) return res.status(400).json({ error: "User not found" });
+    const { phone_number } = u[0];
+
+    const [b] = await db.query(
+      'SELECT bank_name FROM bank_accounts WHERE id = ?', 
+      [bank_account_id]
+    );
+    if (b.length === 0) return res.status(400).json({ error: "Bank account not found" });
+    const { bank_name } = b[0];
+
+    // 3) Generate next InvoiceNo
+    const [lastInv] = await db.query(
+      'SELECT InvoiceNo FROM invoices ORDER BY id DESC LIMIT 1'
+    );
+    let newInvoiceNo = 'INV00001';
+    if (lastInv.length && lastInv[0].InvoiceNo) {
+      const n = parseInt(lastInv[0].InvoiceNo.match(/\d+/)[0], 10) + 1;
+      newInvoiceNo = `INV${String(n).padStart(5, '0')}`;
+    }
+
+    // 4) Compute totals
+    const total_taxable = items.reduce((sum, it) => sum + Number(it.taxable_amount||0), 0);
+    const total_cgst    = items.reduce((sum, it) =>
+                          sum + ((Number(it.taxable_amount||0) * (Number(it.tax_rate||0)/2)) / 100),
+                          0);
+    const total_sgst = total_cgst;
+    const total_igst = 0.00; 
+    const total_amount = total_taxable + total_cgst + total_sgst
+                         - discount_amount + round_off;
+
+    // grab an hsn_code from first item just to satisfy invoice-level column
+    const hsn_code = items[0]?.hsn_code || '';
+
+    // 5) Start transaction
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // 5a) Insert into invoices
+      const [invRes] = await conn.query(
+        `INSERT INTO invoices
+           (type, customer_or_supplier, invoice_date, total_taxable,
+            cgst, sgst, igst, total_amount, discount_amount,
+            percentage, round_off, user_id, book_id, bank_account_id,
+            hsn_code, gstin, InvoiceNo, business_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          type, customer_or_supplier, invoice_date, total_taxable,
+          total_cgst, total_sgst, total_igst, total_amount,
+          discount_amount, percentage, round_off,
+          user_id, book_id, bank_account_id,
+          hsn_code, gstin, newInvoiceNo, businessId
+        ]
+      );
+      const invoiceId = invRes.insertId;
+
+      // 5b) Insert each item into invoice_items
+      for (const item of items) {
+        // validate the FK
+        const [chk] = await conn.query(
+          'SELECT id FROM items WHERE id = ?', 
+          [item.item_id]
+        );
+        if (chk.length === 0) {
+          throw new Error(`Item ID ${item.item_id} not found`);
+        }
+
+        // parse "500 kg" → quantity=500, quantity_unit="kg"
+        let quantity = 0.00, quantity_unit = '';
+        if (item.quantity_unit) {
+          const parts = item.quantity_unit.trim().split(' ');
+          quantity = parseFloat(parts[0]) || 0;
+          quantity_unit = parts.slice(1).join(' ') || '';
+        }
+
+        await conn.query(
+          `INSERT INTO invoice_items
+             (user_id, book_id, business_id, invoice_id,
+              item_id, item_name, hsn_code, quantity_unit,
+              quantity, rate_per_unit, tax_rate,
+              taxable_amount, remark)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            user_id, book_id, businessId, invoiceId,
+            item.item_id, item.item_name, item.hsn_code,
+            quantity_unit, quantity,
+            item.rate_per_unit, item.tax_rate,
+            item.taxable_amount, item.remark||''
+          ]
+        );
+      }
+
+      await conn.commit();
+
+      // 6) Generate PDF & respond
+      const invoiceData = {
+        invoiceId, type, customer_or_supplier,
+        invoice_date, mobile_number: phone_number,
+        bank_name, items,
+        totals: {
+          taxable: total_taxable, cgst: total_cgst,
+          sgst: total_sgst, igst: total_igst,
+          discount: discount_amount, round_off, grand_total: total_amount
+        },
+        user_id, gstin, InvoiceNo: newInvoiceNo
+      };
+      const filePath = path.join(pdfsDir, `invoice_${invoiceId}.pdf`);
+      await generateInvoicePDF(invoiceData, filePath);
+
+      return res.status(200).json({
+        success: true,
+        message: "Invoice generated successfully",
+        downloadLink: `/download/invoice_${invoiceId}.pdf`,
+        invoiceId, InvoiceNo: newInvoiceNo
+      });
+
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+  } catch (error) {
+    console.error("Error adding invoice:", error);
+    res.status(500).json({
+      error: error.message || "Internal Server Error",
+      sqlError: error.sqlMessage,
+      code: "INVOICE_CREATION_FAILED"
+    });
+  }
 };
+
 
 // ✅ Download PDF
 exports.downloadPDF = async (req, res) => {

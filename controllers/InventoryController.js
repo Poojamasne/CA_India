@@ -287,92 +287,63 @@ exports.getDetailedInventoryReport = async (req, res) => {
     }
 };
 
-
-// Function to generate the ledger PDF
-const generateLedgerPDF = async (ledgerData, filePath) => {
-    return new Promise((resolve, reject) => {
-        const doc = new PDFDocument({ size: 'A4', margin: 50 });
-        const writeStream = fs.createWriteStream(filePath);
-
-        doc.pipe(writeStream);
-
-        // Add company name and title
-        doc.fontSize(20).text('Ledger', { align: 'center', x: 250, y: 30 });
-        doc.fontSize(12).text('NEXURA INFRA PRIVATE LIMITED', { align: 'center', x: 250, y: 60 });
-
-        // Define table headers and their positions
-        const headers = ['DATE', 'PARTICULARS', 'CASH/BANK', 'AMOUNT'];
-        const headerWidths = [100, 300, 100, 100]; // Widths of each column
-        const xPositions = [50, 150, 250, 350]; // X positions for each column
-
-        // Draw table headers
-        let yPos = 100;
-        doc.fontSize(12).text(headers[0], { align: 'center', x: xPositions[0], y: yPos });
-        doc.text(headers[1], { align: 'center', x: xPositions[1], y: yPos });
-        doc.text(headers[2], { align: 'center', x: xPositions[2], y: yPos });
-        doc.text(headers[3], { align: 'center', x: xPositions[3], y: yPos });
-
-        // Draw table lines
-        doc.moveTo(50, yPos + 20).lineTo(400, yPos + 20).stroke();
-        doc.moveTo(50, yPos + 30).lineTo(400, yPos + 30).stroke();
-
-        // Add table data
-        ledgerData.forEach((item, rowIndex) => {
-            yPos += 30; // Move to the next row
-            doc.fontSize(10).text(item.date, { x: xPositions[0], y: yPos });
-            doc.text(item.particulars, { x: xPositions[1], y: yPos });
-            doc.text(item.cashBank, { x: xPositions[2], y: yPos });
-            doc.text(item.amount, { x: xPositions[3], y: yPos });
-        });
-
-        // Calculate total and add it to the table
-        const totalAmount = ledgerData.reduce((sum, item) => sum + parseFloat(item.amount), 0);
-        yPos += 20; // Move below the last row
-        doc.fontSize(12).text(`TOTAL: ${totalAmount}`, { align: 'right', x: xPositions[3], y: yPos });
-
-        // End the PDF document
-        doc.end();
-
-        writeStream.on('finish', () => {
-            resolve(filePath);
-        });
-
-        writeStream.on('error', (err) => {
-            reject(err);
-        });
-    });
-};
-
-const getLedgerData = async () => {
-    // This function should interface with your database to fetch ledger data
-    // For demonstration purposes, we'll return some static data
-    return [
-        { date: '25-12-2024', particulars: 'INCOME CATEGORY HEAD ACCOUNT WRITING CH\nINCOME TAX FEES\nGST FEES', cashBank: 'Invoice no– 264163', amount: 10000 },
-        { date: '25-12-2024', particulars: 'Shellcode (DERIVED FROM RECEIPT ENTRY)', cashBank: '', amount: 10000 },
-        { date: '25-12-2024', particulars: 'AMOL PATIL', cashBank: 'TRANSFER', amount: 10000 }
-    ];
-};
-
-exports.generateLedgerPDF = async (req, res) => {
+// Get invoices for a single item
+exports.getSingleItemInvoices = async (req, res) => {
     try {
-        const ledgerData = await getLedgerData();
-        const pdfsDir = path.join(__dirname, '..', 'pdfs');
-        if (!fs.existsSync(pdfsDir)) {
-            fs.mkdirSync(pdfsDir);
-        }
-        const filePath = path.join(pdfsDir, 'ledger.pdf');
-        await generateLedgerPDF(ledgerData, filePath);
+        const { user_id, item_id } = req.query;
 
-        res.status(200).json({
+        if (!user_id || !item_id) {
+            return res.status(400).json({
+                success: false,
+                message: "user_id and item_id are required parameters"
+            });
+        }
+
+        // First check if item exists
+        const [item] = await db.query('SELECT id, item_name FROM items WHERE id = ? AND user_id = ?', [item_id, user_id]);
+        
+        if (item.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: `Item with ID ${item_id} not found for this user`
+            });
+        }
+
+        // Then query for invoices
+        const [report] = await db.query(`
+            SELECT 
+                inv.InvoiceNo AS invoice_no,
+                inv.invoice_date,
+                inv.customer_or_supplier AS party,
+                inv.gstin,
+                ii.item_name,
+                ii.hsn_code,
+                ii.quantity_unit,
+                ii.tax_rate,
+                ii.taxable_amount,
+                inv.igst,
+                inv.cgst,
+                inv.sgst,
+                (ii.taxable_amount + inv.igst + inv.cgst + inv.sgst) AS total_amount
+            FROM invoices inv
+            JOIN invoice_items ii ON inv.id = ii.invoice_id
+            WHERE inv.user_id = ? AND ii.item_id = ?
+            ORDER BY inv.invoice_date DESC
+        `, [user_id, item_id]);
+
+        return res.status(200).json({
             success: true,
-            message: "Ledger PDF generated successfully",
-            downloadLink: `/download/ledger.pdf`
+            item: item[0],
+            count: report.length,
+            data: report
         });
+
     } catch (error) {
-        console.error("Error generating PDF:", error);
-        res.status(500).json({ 
-            error: error.message || "Internal Server Error",
-            code: "LEDGER_PDF_CREATION_FAILED"
+        console.error("Error in getSingleItemInvoices:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
         });
     }
 };

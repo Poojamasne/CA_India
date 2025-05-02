@@ -13,5 +13,6 @@ router.get('/item-wise', inventoryController.getItemWiseInventoryReport);
 // Inventory Report - Detailed Transactions (All Items)
 router.get('/detailed', inventoryController.getDetailedInventoryReport);
 
+router.get('/inventory/single-item-invoices', inventoryController.getSingleItemInvoices);
 
 module.exports = router;

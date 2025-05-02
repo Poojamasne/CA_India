@@ -29,6 +29,7 @@ const referencerRoutes = require('./routes/referencerRoutes');
 const InvoiceDetailRoutes = require('./routes/InvoiceDetailRoutes');
 const InventoryRoutes = require('./routes/InventoryRoutes');
 const filterFlowRoutes = require('./routes/FilterFlowRoutes');
+const ledgerRoutes = require('./routes/ledgerRoutes');
 
 const app = express();
 const server = createServer(app);
@@ -107,6 +108,7 @@ app.use('/api', referencerRoutes);
 app.use('/api', InvoiceDetailRoutes);
 app.use('/api', filterFlowRoutes);
 app.use('/api', InventoryRoutes); // Inventory Routes
+app.use('/api', ledgerRoutes); // Ledger Routes
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
