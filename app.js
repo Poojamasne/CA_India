@@ -30,6 +30,7 @@ const InvoiceDetailRoutes = require('./routes/InvoiceDetailRoutes');
 const InventoryRoutes = require('./routes/InventoryRoutes');
 const filterFlowRoutes = require('./routes/FilterFlowRoutes');
 const ledgerRoutes = require('./routes/ledgerRoutes');
+const stockRoutes = require('./routes/stockRoutes');
 
 const app = express();
 const server = createServer(app);
@@ -109,6 +110,7 @@ app.use('/api', InvoiceDetailRoutes);
 app.use('/api', filterFlowRoutes);
 app.use('/api', InventoryRoutes); // Inventory Routes
 app.use('/api', ledgerRoutes); // Ledger Routes
+app.use('/api', stockRoutes); // example: GET /api/stock-register
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
